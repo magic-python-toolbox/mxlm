@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-from openai import OpenAI
 
 
 class ChatAPI:
@@ -11,6 +10,8 @@ class ChatAPI:
     default_base_url = None
 
     def __init__(self, base_url=None, api_key="sk-NoneKey", **default_argkws):
+        from openai import OpenAI
+
         self.base_url = base_url or self.default_base_url
         self.api_key = api_key
         self.client = OpenAI(api_key=api_key, base_url=base_url)

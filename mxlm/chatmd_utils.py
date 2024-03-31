@@ -53,22 +53,23 @@ def chatmd_to_messages(chatmd):
 if __name__ == "__main__":
     chatmd_example = """
 
-<!--<|BOT|>--><hr></hr><hr></hr> tag must be one line. Could be str or json
+<!--<|BOT|>--><hr></hr><hr></hr> Here you can put the `tag`, must be one line. Could be str or JSON.
 ## system
 You are a helpful assistant.
 
-<!--<|BOT|>--><hr></hr><hr></hr> {"role": "del", "content": "Thank you, doctor2!"}
+<!--<|BOT|>--><hr></hr><hr></hr> {"url":"XXX.html", "title":"XXX"}
 ## context
-None
+{text from url}
 
 <!--<|BOT|>--><hr></hr><hr></hr>
 ## comment
-Multi-line comments 
-that will not be seen by model
+Multi-line comments.  
+Visible to humans but invisible to models.
 
 <!--<|BOT|>--><hr></hr><hr></hr>
 ## user  
-Thank you, doctor2!
+Summarize the content in this url: 
+https://XXX.html
 """
     msgs = chatmd_to_messages(chatmd_example)
     for msg in msgs:
