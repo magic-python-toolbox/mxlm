@@ -43,7 +43,6 @@ def chatmd_to_messages(chatmd):
             is_dict = tag[0] == "{" and tag[-1] == "}" and ":" in tag
             is_list = tag[0] == "[" and tag[-1] == "]"
             if is_dict or is_list:
-                print(tag)
                 tag = json.loads(tag)
             msg["tag"] = tag
         messages.append(msg)

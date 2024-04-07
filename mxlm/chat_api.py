@@ -14,9 +14,9 @@ class ChatAPI:
 
         self.base_url = base_url or self.default_base_url
         self.api_key = api_key
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.default_argkws = dict(
-            model=self.get_model_list()[-1]["id"],
+            model=self.get_default_model(),
             max_tokens=1024,
             top_p=0.9,
             temperature=0.5,
@@ -26,6 +26,9 @@ class ChatAPI:
     def get_model_list(self):
         return self.client.models.list().dict()["data"]
 
+    def get_default_model(self):
+        return self.get_model_list()[-1]["id"]
+
     def __call__(
         self, messages=None, return_messages=False, return_dict=False, **argkws_
     ):
@@ -33,7 +36,7 @@ class ChatAPI:
         Returns new message.content by default
         """
         messages = messages or self.default_messages
-        argkws = self.default_argkws
+        argkws = self.default_argkws.copy()
         argkws.update(argkws_)
         response = self.client.chat.completions.create(messages=messages, **argkws)
 
@@ -68,11 +71,13 @@ class ChatAPI:
         argkws_str = json.dumps(self.default_argkws, indent=2)
         return f"mxlm.ChatAPI{tuple([self.base_url])}:\n{argkws_str[2:-2]}"
 
+    __repr__ = __str__
+
 
 if __name__ == "__main__":
     from boxx import *
 
-    client = ChatAPI("http://127.0.0.1:9200/v1")
+    client = ChatAPI()
     print(client)
     msg = client(stream=True)
     # print(msg)
