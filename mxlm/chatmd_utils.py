@@ -23,16 +23,31 @@ def messages_to_chatmd(messages):
     return md
 
 
-def chatmd_to_messages(chatmd):
+def chatmd_to_messages(chatmd, rstrip_content=True):
+    """
+    Parameters
+    ----------
+    rstrip_content : bool, optional
+        The default is True, for last dialogue may has many '\n'.
+        Only strip right '\n'.
+
+    Returns
+    -------
+    messages
+    """
     pattern = re.compile(
         r"<!--<\|BOT\|>--><hr></hr><hr></hr> *(?P<tag>.*?) *\n##  ?(?P<role>\w*?) *\n(?P<content>.+?)"  # content
-        "(?=\n\n<!--<\|BOT\|>--><hr></hr><hr></hr>|$)",
+        "(?=\n<!--<\|BOT\|>--><hr></hr><hr></hr>|$)",
         re.DOTALL,
     )
 
     messages = []
     for match in pattern.finditer(chatmd):
         content = match.group("content")  # .strip()
+        if rstrip_content:
+            content = content.rstrip("\n")
+        if content.endswith("\n"):
+            content = content[:-1]
         msg = {
             "role": match.group("role"),
             "content": content,
@@ -50,11 +65,14 @@ def chatmd_to_messages(chatmd):
 
 
 if __name__ == "__main__":
-    chatmd_example = """
-
-<!--<|BOT|>--><hr></hr><hr></hr> Here you can put the `tag`, must be one line. Could be str or JSON.
+    chatmd_example = """<!--<|BOT|>--><hr></hr><hr></hr> Here you can put the `tag`, must be one line. Could be str or JSON.
 ## system
 You are a helpful assistant.
+
+<!--<|BOT|>--><hr></hr><hr></hr>
+## user  
+Summarize the content in this url: 
+https://XXX.html
 
 <!--<|BOT|>--><hr></hr><hr></hr> {"url":"XXX.html", "title":"XXX"}
 ## context
@@ -64,11 +82,6 @@ You are a helpful assistant.
 ## comment
 Multi-line comments.  
 Visible to humans but invisible to models.
-
-<!--<|BOT|>--><hr></hr><hr></hr>
-## user  
-Summarize the content in this url: 
-https://XXX.html
 """
     msgs = chatmd_to_messages(chatmd_example)
     for msg in msgs:
