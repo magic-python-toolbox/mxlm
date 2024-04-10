@@ -57,9 +57,9 @@ class ChatAPI:
             return [{"role": "user", "content": msgs}]
         if isinstance(msgs, dict):
             messages = []
-            for role in ["system", "context", "user"]:
+            for role in ["system", "context", "user", "assistant"]:
                 if role in msgs:
-                    messages.append(dict(role=role, context=msgs[role]))
+                    messages.append(dict(role=role, content=msgs[role]))
             return messages
         return msgs
 
@@ -67,12 +67,11 @@ class ChatAPI:
         self, messages=None, return_messages=False, return_dict=False, **kwargs_
     ):
         """
-        messages support str, dict for convenient, e.g.:
+        messages support str, dict for convenient single-round dialogue, e.g.:
         >>> client("Tell me a joke.")
         >>> client(
             {
                 "system": "you are a helpful assistant.",
-                "context": "Here are some examples of jokes...",
                 "user": "Tell me a joke."
                 }
             )
@@ -85,13 +84,11 @@ class ChatAPI:
         if "stream" in kwargs:
             kwargs["stream"] = bool(kwargs["stream"])
         response = self.client.chat.completions.create(messages=messages, **kwargs)
-
         if kwargs.get("stream"):
             content = ""
             chunki = -1
-            for tryi in range(
-                1, 15
-            ):  # TODO: remove this Temporary solution for empty stream
+            for tryi in range(1, 6):
+                # TODO: remove this Temporary solution for empty stream
                 for chunki, chunk in enumerate(response):
                     if not chunki:
                         role = chunk.choices[0].delta.role
@@ -104,7 +101,7 @@ class ChatAPI:
                     import warnings
 
                     warnings.warn(
-                        f"Empty stream, ChatAPI retry {tryi}st time",
+                        f'Empty stream! ChatAPI(model="{kwargs.get("model")}") retry {tryi}st time',
                         category=UserWarning,
                     )
                     response = self.client.chat.completions.create(
@@ -112,6 +109,9 @@ class ChatAPI:
                     )
                 else:
                     break
+            assert (
+                response.response.status_code == 200
+            ), f"status_code: {response.response.status_code}"
             chunk.choices[0].message = chunk.choices[0].delta
             del chunk.choices[0].delta
             chunk.choices[0].message.content = content
@@ -127,6 +127,10 @@ class ChatAPI:
             elif return_messages:
                 return d["new_messages"]
         return response.choices[0].message.content
+
+    @property
+    def model(self):
+        return self.default_kwargs.get("model")
 
     def __str__(self):
         import json
