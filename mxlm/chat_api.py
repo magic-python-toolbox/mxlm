@@ -12,7 +12,7 @@ class ChatAPI:
 
     def __init__(
         self,
-        base_url=None,
+        base_url=None,  # try get OPENAI_BASE_URL env
         api_key=None,  # try get OPENAI_API_KEY env
         model=None,
         temperature=0.5,
@@ -22,7 +22,7 @@ class ChatAPI:
     ):
         from openai import OpenAI
 
-        self.base_url = base_url or self.default_base_url
+        self.base_url = base_url or self.default_base_url or os.environ.get("OPENAI_BASE_URL")
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "sk-NoneKey")
 
         # split kwargs to client's kwargs and call kwargs
@@ -47,7 +47,7 @@ class ChatAPI:
         return self.client.models.list().dict()["data"]
 
     def get_default_model(self):
-        return self.get_model_list()[-1]["id"]
+        return self.get_model_list()[0]["id"]
 
     @staticmethod
     def convert_to_messages(msgs):
@@ -63,26 +63,7 @@ class ChatAPI:
             return messages
         return msgs
 
-    def __call__(
-        self, messages=None, return_messages=False, return_dict=False, **kwargs_
-    ):
-        """
-        messages support str, dict for convenient single-round dialogue, e.g.:
-        >>> client("Tell me a joke.")
-        >>> client(
-            {
-                "system": "you are a helpful assistant.",
-                "user": "Tell me a joke."
-                }
-            )
-        Returns new message.content by default
-        """
-        messages = messages or self.default_messages
-        messages = self.convert_to_messages(messages)
-        kwargs = self.default_kwargs.copy()
-        kwargs.update(kwargs_)
-        if "stream" in kwargs:
-            kwargs["stream"] = bool(kwargs["stream"])
+    def get_dict_by_chat_completions(self, messages, **kwargs):
         response = self.client.chat.completions.create(messages=messages, **kwargs)
         if kwargs.get("stream"):
             content = ""
@@ -119,14 +100,55 @@ class ChatAPI:
             response = chunk
             print(f"<|{response.choices[0].finish_reason}|>")
         # assert response.status_code == 200, response.status_code
+        d = response.dict()
+        return d
+
+    def get_dict_by_completions(self, messages, **kwargs):
+        import requests
+
+        kwargs["prompt"] = messages[-1]["content"]
+        assert not kwargs.get("stream"), "NotImplementedError"
+        completion_url = os.path.join(self.base_url, "completions")
+        # stop_id: 2
+        rsp = requests.post(completion_url, json=kwargs)
+        d = rsp.json()
+        if "choices" in d:
+            if "message" not in d:
+                d["choices"][0]["message"] = dict(content=d["choices"][0]["text"])
+        return d
+
+    def __call__(
+        self, messages=None, return_messages=False, return_dict=False, **kwargs_
+    ):
+        """
+        messages support str, dict for convenient single-round dialogue, e.g.:
+        >>> client("Tell me a joke.")
+        >>> client(
+            {
+                "system": "you are a helpful assistant.",
+                "user": "Tell me a joke."
+                }
+            )
+        Returns new message.content by default
+        """
+        messages = messages or self.default_messages
+        messages = self.convert_to_messages(messages)
+        kwargs = self.default_kwargs.copy()
+        kwargs.update(kwargs_)
+        if "stream" in kwargs:
+            kwargs["stream"] = bool(kwargs["stream"])
+        is_completions = kwargs.pop("completions") if "completions" in kwargs else False
+        if is_completions:
+            d = self.get_dict_by_completions(messages, **kwargs)
+        else:
+            d = self.get_dict_by_chat_completions(messages, **kwargs)
         if return_messages or return_dict:
-            d = response.dict()
             d["new_messages"] = messages + [d["choices"][0]["message"]]
             if return_dict:
                 return d
             elif return_messages:
                 return d["new_messages"]
-        return response.choices[0].message.content
+        return d["choices"][0]["message"]["content"]
 
     @property
     def model(self):
