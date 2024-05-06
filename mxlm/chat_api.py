@@ -22,7 +22,9 @@ class ChatAPI:
     ):
         from openai import OpenAI
 
-        self.base_url = base_url or self.default_base_url or os.environ.get("OPENAI_BASE_URL")
+        self.base_url = (
+            base_url or self.default_base_url or os.environ.get("OPENAI_BASE_URL")
+        )
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "sk-NoneKey")
 
         # split kwargs to client's kwargs and call kwargs
@@ -130,9 +132,13 @@ class ChatAPI:
                 }
             )
         Returns new message.content by default
+
+        Support old completions API when set `completions=True`
         """
         messages = messages or self.default_messages
         messages = self.convert_to_messages(messages)
+        for message in messages:
+            assert "role" in message and "content" in message, message
         kwargs = self.default_kwargs.copy()
         kwargs.update(kwargs_)
         if "stream" in kwargs:

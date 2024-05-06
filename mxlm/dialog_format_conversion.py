@@ -57,6 +57,7 @@ def messages_to_llama2_chat(messages):
     template = template[3:]
     return template
 
+
 if __name__ == "__main__":
     from mxlm import ChatAPI
 
