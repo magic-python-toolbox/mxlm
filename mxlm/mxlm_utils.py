@@ -11,6 +11,8 @@ def df_to_html(df, *args, max_width=400, **argkws):
     """
     Pretty print DataFrame to html
     """
+    if hasattr(df, "to_frame"):
+        df = df.to_frame()
     argkws.setdefault(
         "formatters",
         {
