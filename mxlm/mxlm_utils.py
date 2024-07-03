@@ -29,3 +29,7 @@ def df_to_html(df, *args, max_width=400, HTML_WIDTH_PER_CHAR=8, **argkws):
     )
     argkws.setdefault("escape", False)
     return df.to_html(*args, **argkws)
+
+
+def markdown_escape(text):
+    return text.replace("\n", "↳").replace("|", "\|").replace("$", "\$").strip()
