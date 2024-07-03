@@ -95,25 +95,28 @@ class ChatAPI:
             assert (
                 response.response.status_code == 200
             ), f"status_code: {response.response.status_code}"
-            chunk.choices[0].message = chunk.choices[0].delta
-            del chunk.choices[0].delta
-            chunk.choices[0].message.content = content
-            chunk.choices[0].message.role = role
-            response = chunk
-            print(f"<|{response.choices[0].finish_reason}|>")
-        # assert response.status_code == 200, response.status_code
-        d = response.dict()
+            d = chunk.dict()
+            d["choices"][0]["message"] = d["choices"][0].pop("delta")
+            d["choices"][0]["message"]["content"] = content
+            d["choices"][0]["message"]["role"] = role
+            print(f"<|{d['choices'][0]['finish_reason']}|>")
+        else:
+            d = response.dict()
         return d
 
     def get_dict_by_completions(self, messages, **kwargs):
         import requests
 
         kwargs["prompt"] = messages[-1]["content"]
+        kwargs["stop"] = kwargs.get("stop", [{"token": "<|EOT|>"}])
         assert not kwargs.get("stream"), "NotImplementedError"
         completion_url = os.path.join(self.base_url, "completions")
         # stop_id: 2
         rsp = requests.post(completion_url, json=kwargs)
+        assert rsp.status_code == 200, (rsp.status_code, rsp.text)
         d = rsp.json()
+        # from boxx import tree
+        # tree([kwargs,d])
         if "choices" in d:
             if "message" not in d:
                 d["choices"][0]["message"] = dict(content=d["choices"][0]["text"])
