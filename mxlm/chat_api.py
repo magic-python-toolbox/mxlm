@@ -20,8 +20,10 @@ class ChatAPI:
         top_p=0.9,
         **default_kwargs,
     ):
+        import openai
         from openai import OpenAI
 
+        assert openai.__version__ >= "1.0", openai.__version__
         self.base_url = (
             base_url or self.default_base_url or os.environ.get("OPENAI_BASE_URL")
         )
