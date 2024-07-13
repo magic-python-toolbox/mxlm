@@ -16,7 +16,7 @@ class ChatAPI:
         api_key=None,  # try get OPENAI_API_KEY env
         model=None,
         temperature=0.5,
-        max_tokens=1024,
+        max_tokens=2048,
         top_p=0.9,
         **default_kwargs,
     ):

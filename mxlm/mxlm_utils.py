@@ -33,3 +33,30 @@ def df_to_html(df, *args, max_width=400, HTML_WIDTH_PER_CHAR=8, **argkws):
 
 def markdown_escape(text):
     return text.replace("\n", "↳").replace("|", "\|").replace("$", "\$").strip()
+
+
+def remove_last_assistant(messages):
+    while messages[-1]["role"] == "assistant":
+        messages = messages[:-1]
+    return messages
+
+
+def remove_system_prompt(messages):
+    while messages[0]["role"] == "system":
+        messages = messages[1:]
+    return messages
+
+
+def messages_to_condition_key(messages):
+    # For duplicate removal
+    instructs = ()
+    instruct = ()
+    for msg in messages:
+        if msg["role"] == "assistant":
+            instructs += (instruct,)
+            instruct = ()
+        else:
+            instruct += (msg["role"], msg["content"])
+    if instruct:
+        instructs += (instruct,)
+    return instructs
