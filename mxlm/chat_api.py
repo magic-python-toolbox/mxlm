@@ -138,8 +138,11 @@ class ChatAPI:
             )
         Returns new message.content by default
 
-        Support old completions API when set `completions=True`
+        - Support old completions API when set `completions=True`
+        - Support cache when set `cache=True`, cache at /tmp/mxlm-tmp/cache
         """
+        from mxlm.mxlm_utils import CacheChatRequest
+
         messages = messages or self.default_messages
         messages = self.convert_to_messages(messages)
         for message in messages:
@@ -148,11 +151,23 @@ class ChatAPI:
         kwargs.update(kwargs_)
         if "stream" in kwargs:
             kwargs["stream"] = bool(kwargs["stream"])
-        is_completions = kwargs.pop("completions") if "completions" in kwargs else False
-        if is_completions:
-            d = self.get_dict_by_completions(messages, **kwargs)
+
+        is_cache = kwargs.pop("cache") if "cache" in kwargs else False
+        in_cache = is_cache and CacheChatRequest.is_in_cache(messages, **kwargs)
+        if in_cache:
+            d = CacheChatRequest.get_cache(messages, **kwargs)
         else:
-            d = self.get_dict_by_chat_completions(messages, **kwargs)
+            is_completions = (
+                kwargs.pop("completions") if "completions" in kwargs else False
+            )
+            if is_completions:
+                # By `requests.post`
+                d = self.get_dict_by_completions(messages, **kwargs)
+            else:
+                # By `openai.ChatCompletion.create`
+                d = self.get_dict_by_chat_completions(messages, **kwargs)
+        if is_cache and not in_cache:
+            CacheChatRequest.set_cache(d, messages, **kwargs)
         if return_messages or return_dict:
             d["new_messages"] = messages + [d["choices"][0]["message"]]
             if return_dict:

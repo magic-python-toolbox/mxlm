@@ -5,6 +5,7 @@ Created on Fri Mar 29 16:15:58 2024
 
 @author: yl
 """
+import os
 
 
 def df_to_html(df, *args, max_width=400, HTML_WIDTH_PER_CHAR=8, **argkws):
@@ -60,3 +61,45 @@ def messages_to_condition_key(messages):
     if instruct:
         instructs += (instruct,)
     return instructs
+
+
+class CacheChatRequest:
+    """
+    Cache chat request.
+    Index by MD5 of messages and kwargs.
+    """
+
+    @classmethod
+    def get_cache_path(cls, messages, **kwargs):
+        import hashlib
+        import tempfile
+
+        cache_dir = os.path.join(tempfile.gettempdir(), "mxlm-tmp/cache")
+        os.makedirs(cache_dir, exist_ok=True)
+
+        fname = hashlib.md5(str(messages + [kwargs]).encode("utf-8")).hexdigest()
+        cache_path = os.path.join(cache_dir, fname + ".json")
+        return cache_path
+
+    @classmethod
+    def is_in_cache(cls, messages, **kwargs):
+        cache_path = cls.get_cache_path(messages, **kwargs)
+        return os.path.isfile(cache_path)
+
+    @classmethod
+    def get_cache(cls, messages, **kwargs):
+        import json
+
+        cache_path = cls.get_cache_path(messages, **kwargs)
+        with open(cache_path, "r") as f:
+            d = json.load(f)
+        return d
+
+    @classmethod
+    def set_cache(cls, d, messages, **kwargs):
+        import json
+
+        cache_path = cls.get_cache_path(messages, **kwargs)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(d, f, indent=2, ensure_ascii=False)
+        return cache_path

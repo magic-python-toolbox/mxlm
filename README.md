@@ -1,7 +1,9 @@
 # `mxlm`: Language Model Utils
 
 ## ▮ Features
-- [chat_api](mxlm/chat_api.py): A simple object-oriented wrapper for the OpenAI chat completions API.
+- [chat_api](mxlm/chat_api.py): A simple object-oriented wrapper for the OpenAI chat API.
+    - Supports caching chat requests to avoid starting over in case of errors.
+    - Supports the more powerful legacy completions API, compatible with `openai` versions >= 1.0.
 - [`.chat.md` format](mxlm/chatmd_utils.py): 
     - A multi-turn dialogue format based on markdown, capable of converting to and from OpenAI messages JSON.
     - Modify and annotate multi-turn dialogue data using your favorite editor.
