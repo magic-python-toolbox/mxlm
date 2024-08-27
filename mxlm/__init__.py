@@ -9,6 +9,7 @@ from .mxlm_utils import (
     remove_last_assistant,
     remove_system_prompt,
     messages_to_condition_key,
+    bbcode_to_markdown_math,
 )
 from .random_utils import shuffle_loop_with_seed
 

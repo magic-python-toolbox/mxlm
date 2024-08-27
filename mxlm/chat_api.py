@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
+import time
+import warnings
 
 
 class ChatAPI:
@@ -24,6 +26,8 @@ class ChatAPI:
         from openai import OpenAI
 
         assert openai.__version__ >= "1.0", openai.__version__
+        if model is None and base_url and ":" not in base_url and "/" not in base_url:
+            base_url, model = model, base_url
         self.base_url = (
             base_url or self.default_base_url or os.environ.get("OPENAI_BASE_URL")
         )
@@ -83,8 +87,6 @@ class ChatAPI:
                         print(delta, end="")
                 if chunki == -1:
                     # print("retry!"*5)
-                    import warnings
-
                     warnings.warn(
                         f'Empty stream! ChatAPI(model="{kwargs.get("model")}") retry {tryi}st time',
                         category=UserWarning,
@@ -106,10 +108,14 @@ class ChatAPI:
             d = response.dict()
         return d
 
-    def get_dict_by_completions(self, messages, **kwargs):
+    def get_dict_by_completions(self, messages, **kwargs):  # Legacy
         import requests
 
-        kwargs["prompt"] = messages[-1]["content"]
+        kwargs["prompt"] = (
+            messages
+            if isinstance(messages[-1], str)
+            else to_chatml(messages[-1]["content"])
+        )
         kwargs["stop"] = kwargs.get("stop", [{"token": "<|EOT|>"}])
         assert not kwargs.get("stream"), "NotImplementedError"
         completion_url = os.path.join(self.base_url, "completions")
@@ -145,27 +151,39 @@ class ChatAPI:
 
         messages = messages or self.default_messages
         messages = self.convert_to_messages(messages)
-        for message in messages:
-            assert "role" in message and "content" in message, message
+
         kwargs = self.default_kwargs.copy()
         kwargs.update(kwargs_)
+        is_completions = kwargs.pop("completions") if "completions" in kwargs else False
+        if not is_completions:
+            for message in messages:
+                assert "role" in message and "content" in message, message
         if "stream" in kwargs:
             kwargs["stream"] = bool(kwargs["stream"])
 
+        retry = kwargs.pop("retry") if "retry" in kwargs else 1
         is_cache = kwargs.pop("cache") if "cache" in kwargs else False
         in_cache = is_cache and CacheChatRequest.is_in_cache(messages, **kwargs)
         if in_cache:
             d = CacheChatRequest.get_cache(messages, **kwargs)
         else:
-            is_completions = (
-                kwargs.pop("completions") if "completions" in kwargs else False
-            )
-            if is_completions:
-                # By `requests.post`
-                d = self.get_dict_by_completions(messages, **kwargs)
-            else:
-                # By `openai.ChatCompletion.create`
-                d = self.get_dict_by_chat_completions(messages, **kwargs)
+            for tryi in range(retry):
+                try:
+                    if is_completions:
+                        # By `requests.post`
+                        d = self.get_dict_by_completions(messages, **kwargs)
+                    else:
+                        # By `openai.ChatCompletion.create`
+                        d = self.get_dict_by_chat_completions(messages, **kwargs)
+                    break
+                except Exception as e:
+                    if tryi == retry - 1:
+                        raise e
+                    warnings.warn(
+                        f"An exception at retry {tryi}/{retry} of {kwargs['model']}: {repr(e)}"
+                    )
+                    time.sleep(2**tryi)
+
         if is_cache and not in_cache:
             CacheChatRequest.set_cache(d, messages, **kwargs)
         if return_messages or return_dict:

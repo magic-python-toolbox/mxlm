@@ -63,6 +63,23 @@ def messages_to_condition_key(messages):
     return instructs
 
 
+def bbcode_to_markdown_math(messages):  # inplace
+    for msg in messages:
+        if msg["role"] == "assistant":
+            msg["content"] = (
+                msg["content"]
+                .replace("\\[ ", "$$")
+                .replace(" \\]", "$$")
+                .replace("\\( ", "$")
+                .replace(" \\)", "$")
+                .replace("\\[", "$$")
+                .replace("\\]", "$$")
+                .replace("\\(", "$")
+                .replace("\\)", "$")
+            )
+    return messages
+
+
 class CacheChatRequest:
     """
     Cache chat request.
@@ -77,6 +94,7 @@ class CacheChatRequest:
         cache_dir = os.path.join(tempfile.gettempdir(), "mxlm-tmp/cache")
         os.makedirs(cache_dir, exist_ok=True)
 
+        [kwargs.pop(key) for key in ["stream", "cache", "retry"] if key in kwargs]
         fname = hashlib.md5(str(messages + [kwargs]).encode("utf-8")).hexdigest()
         cache_path = os.path.join(cache_dir, fname + ".json")
         return cache_path
