@@ -206,6 +206,27 @@ class ChatAPI:
 
     __repr__ = __str__
 
+    @classmethod
+    def free_api(
+        cls,
+        api_key=None,
+        base_url="https://open.bigmodel.cn/api/paas/v4/",
+        model="glm-4-flash",
+        stream=True,
+        **kwargs,
+    ):
+        """
+        Free API: The current choice for the free ChatAPI is glm-4-flash, which requires users to apply for an api_key.
+        """
+        if api_key is None:
+            assert (
+                "ZHIPUAI_API_KEY" in os.environ
+            ), "Please apply for a ZHIPUAI_API_KEY and set it as an environment variable, or pass it in through the api_key parameter."
+            api_key = os.environ["ZHIPUAI_API_KEY"]
+        return cls(
+            api_key=api_key, base_url=base_url, model=model, stream=stream, **kwargs
+        )
+
 
 if __name__ == "__main__":
     # from boxx import *
