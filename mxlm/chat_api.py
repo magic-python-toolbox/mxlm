@@ -103,7 +103,20 @@ class ChatAPI:
             d["choices"][0]["message"] = d["choices"][0].pop("delta")
             d["choices"][0]["message"]["content"] = content
             d["choices"][0]["message"]["role"] = role
-            print(f"<|{d['choices'][0]['finish_reason']}|>")
+            finish_reason_str = f"<|{d['choices'][0]['finish_reason']}|>"
+            token_usage_str = (
+                f", tokens: {d['usage']['prompt_tokens']}+{d['usage']['completion_tokens']}={d['usage']['total_tokens']}"
+                if d.get("usage")
+                else ""
+            )
+            if d.get("usage") and "cached_tokens" in d.get("usage", {}):
+                token_usage_str += f" (cached {d['usage']['cached_tokens']})"
+            model_str = f'@"{d["model"]}"' if "model" in d else ""
+            print(finish_reason_str)
+            print()
+            print(
+                model_str + token_usage_str,
+            )
         else:
             d = response.dict()
         return d
