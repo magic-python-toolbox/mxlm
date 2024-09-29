@@ -6,6 +6,7 @@ Created on Fri Mar 29 16:15:58 2024
 @author: yl
 """
 import os
+import json
 
 
 def df_to_html(df, *args, max_width=400, HTML_WIDTH_PER_CHAR=8, **argkws):
@@ -80,44 +81,48 @@ def bbcode_to_markdown_math(messages):  # inplace
     return messages
 
 
-class CacheChatRequest:
+class ChatRequestCacheManager:
     """
     Cache chat request.
     Index by MD5 of messages and kwargs.
     """
 
-    @classmethod
-    def get_cache_path(cls, messages, **kwargs):
-        import hashlib
+    def __init__(self, messages, cache, **kwargs):
         import tempfile
 
-        cache_dir = os.path.join(tempfile.gettempdir(), "mxlm-tmp/cache")
-        os.makedirs(cache_dir, exist_ok=True)
+        assert cache, cache
+        self.messages = messages
+        self.kwargs = kwargs
+        [
+            self.kwargs.pop(key)
+            for key in ["stream", "cache", "retry"]
+            if key in self.kwargs
+        ]
+        if isinstance(cache, str):
+            self.cache_dir = cache
+        else:
+            self.cache_dir = os.path.join(tempfile.gettempdir(), "mxlm-tmp/cache")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        self.cache_path = self.get_cache_path()
 
-        [kwargs.pop(key) for key in ["stream", "cache", "retry"] if key in kwargs]
-        fname = hashlib.md5(str(messages + [kwargs]).encode("utf-8")).hexdigest()
-        cache_path = os.path.join(cache_dir, fname + ".json")
+    def get_cache_path(self):
+        import hashlib
+
+        fname = hashlib.md5(
+            str(self.messages + [self.kwargs]).encode("utf-8")
+        ).hexdigest()
+        cache_path = os.path.join(self.cache_dir, fname + ".json")
         return cache_path
 
-    @classmethod
-    def is_in_cache(cls, messages, **kwargs):
-        cache_path = cls.get_cache_path(messages, **kwargs)
-        return os.path.isfile(cache_path)
+    def is_in_cache(self):
+        return os.path.isfile(self.cache_path)
 
-    @classmethod
-    def get_cache(cls, messages, **kwargs):
-        import json
-
-        cache_path = cls.get_cache_path(messages, **kwargs)
-        with open(cache_path, "r") as f:
+    def get_cache(self):
+        with open(self.cache_path, "r") as f:
             d = json.load(f)
         return d
 
-    @classmethod
-    def set_cache(cls, d, messages, **kwargs):
-        import json
-
-        cache_path = cls.get_cache_path(messages, **kwargs)
-        with open(cache_path, "w", encoding="utf-8") as f:
+    def set_cache(self, d):
+        with open(self.cache_path, "w", encoding="utf-8") as f:
             json.dump(d, f, indent=2, ensure_ascii=False)
-        return cache_path
+        return self.cache_path

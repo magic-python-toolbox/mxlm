@@ -18,7 +18,7 @@ class ChatAPI:
         api_key=None,  # try get OPENAI_API_KEY env
         model=None,
         temperature=0.5,
-        max_tokens=2048,
+        max_tokens=1920,  # avoid 2k context model error
         top_p=0.9,
         **default_kwargs,
     ):
@@ -160,7 +160,7 @@ class ChatAPI:
         - Support old completions API when set `completions=True`
         - Support cache when set `cache=True`, cache at /tmp/mxlm-tmp/cache
         """
-        from mxlm.mxlm_utils import CacheChatRequest
+        from mxlm.mxlm_utils import ChatRequestCacheManager
 
         messages = messages or self.default_messages
         messages = self.convert_to_messages(messages)
@@ -175,10 +175,12 @@ class ChatAPI:
             kwargs["stream"] = bool(kwargs["stream"])
 
         retry = kwargs.pop("retry") if "retry" in kwargs else 1
-        is_cache = kwargs.pop("cache") if "cache" in kwargs else False
-        in_cache = is_cache and CacheChatRequest.is_in_cache(messages, **kwargs)
-        if in_cache:
-            d = CacheChatRequest.get_cache(messages, **kwargs)
+        cache = kwargs.pop("cache") if "cache" in kwargs else False
+        if cache:
+            cache_manager = ChatRequestCacheManager(messages, cache, **kwargs)
+            in_cache = cache_manager.is_in_cache()
+        if cache and in_cache:
+            d = cache_manager.get_cache()
         else:
             for tryi in range(retry):
                 try:
@@ -197,8 +199,8 @@ class ChatAPI:
                     )
                     time.sleep(2**tryi)
 
-        if is_cache and not in_cache:
-            CacheChatRequest.set_cache(d, messages, **kwargs)
+        if cache and not in_cache:
+            cache_manager.set_cache(d)
         if return_messages or return_dict:
             d["new_messages"] = messages + [d["choices"][0]["message"]]
             if return_dict:
