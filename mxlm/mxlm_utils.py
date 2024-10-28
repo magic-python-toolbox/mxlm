@@ -87,6 +87,8 @@ class ChatRequestCacheManager:
     Index by MD5 of messages and kwargs.
     """
 
+    mxlm_cache_version = 1.0
+
     def __init__(self, messages, cache, **kwargs):
         import tempfile
 
@@ -119,10 +121,21 @@ class ChatRequestCacheManager:
 
     def get_cache(self):
         with open(self.cache_path, "r") as f:
-            d = json.load(f)
-        return d
+            dumped_json = json.load(f)
+            response = dumped_json["response"]
+        return response
 
     def set_cache(self, d):
+        import time
+
+        create_time = "%d-%02d-%02d_%02d:%02d:%02d" % time.localtime(time.time())[:6]
+        dumped_json = dict(
+            mxlm_cache_version=self.mxlm_cache_version,
+            create_time=create_time,
+            kwargs=self.kwargs,
+            prompt=self.messages,
+            response=d,
+        )
         with open(self.cache_path, "w", encoding="utf-8") as f:
-            json.dump(d, f, indent=2, ensure_ascii=False)
+            json.dump(dumped_json, f, indent=2, ensure_ascii=False)
         return self.cache_path

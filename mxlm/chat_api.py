@@ -81,10 +81,11 @@ class ChatAPI:
                 for chunki, chunk in enumerate(response):
                     if not chunki:
                         role = chunk.choices[0].delta.role
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        content += delta
-                        print(delta, end="")
+                    if len(chunk.choices):
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            content += delta
+                            print(delta, end="")
                 if chunki == -1:
                     # print("retry!"*5)
                     warnings.warn(
