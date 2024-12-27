@@ -49,6 +49,25 @@ def remove_system_prompt(messages):
     return messages
 
 
+def message_to_sequence(message):
+    content = message["content"]
+    content = content if isinstance(content, str) else json.dumps(content)
+    finish_reason = message.get("finish_reason")
+    return (
+        f"## {message['role']}\n"
+        + content
+        + (
+            f"<|{finish_reason}|>"
+            if finish_reason and finish_reason != "length"
+            else ""
+        )
+    )
+
+
+def messages_to_sequence(messages):
+    return "\n\n-----\n\n".join([message_to_sequence(msg) for msg in messages])
+
+
 def messages_to_condition_key(messages):
     # For duplicate removal
     instructs = ()
@@ -62,6 +81,20 @@ def messages_to_condition_key(messages):
     if instruct:
         instructs += (instruct,)
     return instructs
+
+
+def sanity_check_messages(messages):
+    for msg in messages:
+        assert "role" in msg, msg
+        assert "content" in msg, msg
+        assert isinstance(msg["content"], (str, list)), msg
+        if "finish_reason" in msg:
+            assert isinstance(msg["finish_reason"], str), msg["finish_reason"]
+        if "preference_tag" in msg:
+            assert msg["preference_tag"] in [None, "chosen", "rejected"], msg[
+                "preference_tag"
+            ]
+    return messages
 
 
 def bbcode_to_markdown_math(messages):  # inplace
@@ -139,3 +172,12 @@ class ChatRequestCacheManager:
         with open(self.cache_path, "w", encoding="utf-8") as f:
             json.dump(dumped_json, f, indent=2, ensure_ascii=False)
         return self.cache_path
+
+
+def hash_object_sha256_base64(obj, sort_keys=True):
+    import hashlib
+    import base64
+
+    canonical_string = json.dumps(obj, sort_keys=sort_keys, separators=(",", ":"))
+    sha256_hash = hashlib.sha256(canonical_string.encode("utf-8")).digest()
+    return base64.b64encode(sha256_hash).decode("utf-8")

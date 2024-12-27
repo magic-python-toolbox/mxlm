@@ -76,30 +76,17 @@ class ChatAPI:
         if kwargs.get("stream"):
             content = ""
             chunki = -1
-            for tryi in range(1, 6):
-                # TODO: remove this Temporary solution for empty stream
-                for chunki, chunk in enumerate(response):
-                    if not chunki:
-                        role = chunk.choices[0].delta.role
-                    if len(chunk.choices):
-                        delta = chunk.choices[0].delta.content
-                        if delta:
-                            content += delta
-                            print(delta, end="")
-                if chunki == -1:
-                    # print("retry!"*5)
-                    warnings.warn(
-                        f'Empty stream! ChatAPI(model="{kwargs.get("model")}") retry {tryi}st time',
-                        category=UserWarning,
-                    )
-                    response = self.client.chat.completions.create(
-                        messages=messages, **kwargs
-                    )
-                else:
-                    break
             assert (
                 response.response.status_code == 200
             ), f"status_code: {response.response.status_code}"
+            for chunki, chunk in enumerate(response):
+                if not chunki:
+                    role = chunk.choices[0].delta.role
+                if len(chunk.choices):
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        content += delta
+                        print(delta, end="")
             d = chunk.dict()
             d["choices"][0]["message"] = d["choices"][0].pop("delta")
             d["choices"][0]["message"]["content"] = content
@@ -175,7 +162,7 @@ class ChatAPI:
         if "stream" in kwargs:
             kwargs["stream"] = bool(kwargs["stream"])
 
-        retry = kwargs.pop("retry") if "retry" in kwargs else 1
+        retry = kwargs.pop("retry") if "retry" in kwargs else 6
         cache = kwargs.pop("cache") if "cache" in kwargs else False
         if cache:
             cache_manager = ChatRequestCacheManager(messages, cache, **kwargs)

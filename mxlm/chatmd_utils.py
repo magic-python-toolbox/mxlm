@@ -65,6 +65,8 @@ def chatmd_to_messages(chatmd, rstrip_content=True):
 
 
 if __name__ == "__main__":
+    import tempfile
+
     chatmd_example = """<!--<|BOT|>--><hr></hr><hr></hr> Here you can put the `tag`, must be one line. Could be str or JSON.
 ## system
 You are a helpful assistant.
@@ -89,3 +91,7 @@ Visible to humans but invisible to models.
 
     chatmd = messages_to_chatmd(msgs)
     print(chatmd)
+
+    md_path = tempfile.mktemp() + ".md"
+    open(md_path, "w").write(chatmd)
+    print("Save chatmd to:", md_path)

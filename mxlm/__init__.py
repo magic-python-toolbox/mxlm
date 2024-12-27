@@ -8,10 +8,19 @@ from .mxlm_utils import (
     markdown_escape,
     remove_last_assistant,
     remove_system_prompt,
+    message_to_sequence,
+    messages_to_sequence,
     messages_to_condition_key,
+    sanity_check_messages,
     bbcode_to_markdown_math,
+    hash_object_sha256_base64,
 )
 from .random_utils import shuffle_loop_with_seed
 
 # Not imported by default
 # from .richtext import *
+
+# for paste json to dict
+true = True
+false = False
+null = None
