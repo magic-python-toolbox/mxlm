@@ -22,8 +22,10 @@ class ChatAPI:
         top_p=0.9,
         **default_kwargs,
     ):
-        import openai
-        from openai import OpenAI
+        # import openai as openai
+        import mxlm.openai_requests as openai
+
+        OpenAI = openai.OpenAI
 
         assert openai.__version__ >= "1.0", openai.__version__
         if model is None and base_url and ":" not in base_url and "/" not in base_url:
@@ -79,15 +81,17 @@ class ChatAPI:
             assert (
                 response.response.status_code == 200
             ), f"status_code: {response.response.status_code}"
-            for chunki, chunk in enumerate(response):
+            for chunki, _chunk in enumerate(response):
+                chunk = _chunk.dict()
                 if not chunki:
-                    role = chunk.choices[0].delta.role
-                if len(chunk.choices):
-                    delta = chunk.choices[0].delta.content
+                    role = chunk["choices"][0]["delta"].get("role")
+                if len(chunk["choices"]):
+                    delta = chunk["choices"][0]["delta"].get("content", "")
                     if delta:
                         content += delta
                         print(delta, end="")
-            d = chunk.dict()
+                    valide_chunk = chunk
+            d = valide_chunk.copy()
             d["choices"][0]["message"] = d["choices"][0].pop("delta")
             d["choices"][0]["message"]["content"] = content
             d["choices"][0]["message"]["role"] = role
@@ -115,7 +119,7 @@ class ChatAPI:
         kwargs["prompt"] = (
             messages
             if isinstance(messages[-1], str)
-            else to_chatml(messages[-1]["content"])
+            else to_chatml(messages[-1]["content"])  # Not Implemented
         )
         kwargs["stop"] = kwargs.get("stop", [{"token": "<|EOT|>"}])
         assert not kwargs.get("stream"), "NotImplementedError"
