@@ -154,6 +154,10 @@ class OpenAI:
     ) -> requests.Response:
         url = f"{self.base_url}{path}"
         sess = self._session or requests
+        if "extra_body" in json_body:
+            json_body.update(json_body.pop("extra_body"))
+        # from boxx import tree
+        # tree(json_body)
         return sess.post(
             url,
             headers=self._headers,
