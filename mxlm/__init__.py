@@ -6,6 +6,7 @@ from .chatmd_utils import messages_to_chatmd, chatmd_to_messages
 from .mxlm_utils import (
     df_to_html,
     markdown_escape,
+    get_text_content,
     remove_last_assistant,
     remove_system_prompt,
     message_to_sequence,

@@ -37,6 +37,16 @@ def markdown_escape(text):
     return text.replace("\n", "↳").replace("|", "\|").replace("$", "\$").strip()
 
 
+def get_text_content(msg):
+    if isinstance(msg, dict) and "content" in msg:
+        content = msg.get("content", "")
+    else:
+        content = msg
+    if isinstance(content, list):
+        content = "".join([c["text"] for c in content])
+    return content
+
+
 def remove_last_assistant(messages):
     while messages[-1]["role"] == "assistant":
         messages = messages[:-1]

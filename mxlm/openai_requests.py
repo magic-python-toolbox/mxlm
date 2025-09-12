@@ -31,6 +31,7 @@ for chunk in client.chat.completions.create({
 print(client.models.list())
 ```
 """
+
 from __future__ import annotations
 
 import json
