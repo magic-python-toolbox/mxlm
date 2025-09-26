@@ -27,6 +27,7 @@ def compute_prompt_logprobs(chat, msgs):
 
 def standardization_prompt_logprob(prompt_logprob):
     """
+    Convert vLLM prompt_logprob format to top_logprobs format
     prompt_logprob example
     {'5743': {'logprob': -11.900545120239258,
        'rank': 1265,
@@ -35,7 +36,6 @@ def standardization_prompt_logprob(prompt_logprob):
        'rank': 1,
        'decoded_token': 'stitute'}}
     """
-
     if not prompt_logprob:
         return {}
     group_entries = []
@@ -62,13 +62,15 @@ def standardization_prompt_logprob(prompt_logprob):
     return primary_entry
 
 
-def prefill_logprobs_to_sequence(prompt_logprobs):
+def prefill_logprobs_to_sequence(prefill_logprobs):
     return "".join([t["token"] for t in prefill_logprobs if t])
 
 
 def align_prefill_logprobs_to_messages(prefill_logprobs, messages):
     sequence = prefill_logprobs_to_sequence(prefill_logprobs)
-
+    unicode_idx_to_token_idx = []
+    for idx, token in enumerate(prefill_logprobs):
+        unicode_idx_to_token_idx += [idx] * len(token["token"])
     sequence_left = sequence[:]
     for msg in messages:
         content = msg["content"]
@@ -80,18 +82,12 @@ def align_prefill_logprobs_to_messages(prefill_logprobs, messages):
             for chunk in content[::-1]:
                 if chunk["type"] == "text":
                     chunk["text"]
+    g()
 
 
 if __name__ == "__main__":
+    from boxx import *
     from mxlm import ChatAPI
-    import json
-
-    prompt_logprobs = {  # token id: dict
-        "5743": {"logprob": -11.900545120239258, "rank": 1265, "decoded_token": "fix"},
-        "7660": {"logprob": -0.6036703586578369, "rank": 1, "decoded_token": "stitute"},
-    }
-    demo_top_logprobs = standardization_prompt_logprob(prompt_logprobs)
-    print(json.dumps(demo_top_logprobs, ensure_ascii=False, indent=2))
 
     chat = ChatAPI.free_api()
 
