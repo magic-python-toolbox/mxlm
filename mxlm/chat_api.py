@@ -216,20 +216,12 @@ class ChatAPI:
     @classmethod
     def free_api(
         cls,
-        api_key=None,
-        base_url="https://open.bigmodel.cn/api/paas/v4/",
-        model="glm-4-flash",
+        api_key="ak-onPandaTestKey",
+        base_url="http://113.44.140.251:12692/v1",
+        model="Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
         stream=True,
         **kwargs,
     ):
-        """
-        Free API: The current choice for the free ChatAPI is glm-4-flash, which requires users to apply for an api_key.
-        """
-        if api_key is None:
-            assert (
-                "ZHIPUAI_API_KEY" in os.environ
-            ), "Please apply for a ZHIPUAI_API_KEY and set it as an environment variable, or pass it in through the api_key parameter."
-            api_key = os.environ["ZHIPUAI_API_KEY"]
         return cls(
             api_key=api_key, base_url=base_url, model=model, stream=stream, **kwargs
         )
