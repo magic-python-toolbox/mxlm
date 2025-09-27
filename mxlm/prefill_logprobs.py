@@ -72,7 +72,8 @@ def align_prefill_logprobs_to_messages(prefill_logprobs, messages):
     for idx, token in enumerate(prefill_logprobs):
         unicode_idx_to_token_idx += [idx] * len(token["token"])
     sequence_left = sequence[:]
-    for msg in messages:
+    # using inverse order, because the newer msg is more important
+    for msg in messages[::-1]:
         content = msg["content"]
         if content == "":
             continue
