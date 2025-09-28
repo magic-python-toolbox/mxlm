@@ -17,6 +17,7 @@ from .mxlm_utils import (
     hash_object_sha256_base64,
 )
 from .random_utils import shuffle_loop_with_seed
+from .prefill_logprobs import prompt_logprobs_request_kwargs
 
 # Not imported by default
 # from .richtext import *

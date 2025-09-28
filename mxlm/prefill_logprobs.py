@@ -1,7 +1,6 @@
 from copy import deepcopy
 
-prompt_logprobs_kwargs = dict(
-    return_dict=True,
+prompt_logprobs_request_kwargs = dict(
     max_tokens=1,
     temperature=1.0,
     top_p=1.0,
@@ -10,19 +9,27 @@ prompt_logprobs_kwargs = dict(
     stream=False,
     extra_body=dict(
         prompt_logprobs=True,
-        add_generation_prompt=True,
+        add_generation_prompt=True,  # need <|stop|> token logprob for last message
         continue_final_message=False,
         skip_special_tokens=False,
     ),
 )
 
 
-def compute_prompt_logprobs(chat, msgs):
-    response = chat(msgs, **prompt_logprobs_kwargs)
-    response["prefill_logprobs"] = [
+def compute_prefill_logprobs(chat, msgs):
+    """
+    1. using vLLM prompt_logprobs=True to get msgs's prompt logprobs of the mxlm.ChatAPI model
+    2. Convert vLLM prompt_logprob format to top_logprobs format (named `prefill_logprobs`)
+    3. Align prefill_logprobs to each message base on its content, and set to msg["prefill_logprobs"]
+    """
+    response = chat(msgs, return_dict=True, **prompt_logprobs_request_kwargs)
+    prefill_logprobs = [
         standardization_prompt_logprob(d) for d in response["prompt_logprobs"] if d
     ]
-    return response
+    msgs_with_prompt_logprobs = align_prefill_logprobs_to_messages(
+        prefill_logprobs, msgs
+    )
+    return msgs_with_prompt_logprobs
 
 
 def standardization_prompt_logprob(prompt_logprob):
@@ -67,23 +74,49 @@ def prefill_logprobs_to_sequence(prefill_logprobs):
 
 
 def align_prefill_logprobs_to_messages(prefill_logprobs, messages):
+    """
+    If content is only a word like `assistant` or `user`, may case mis-align to role name
+    """
     sequence = prefill_logprobs_to_sequence(prefill_logprobs)
     unicode_idx_to_token_idx = []
     for idx, token in enumerate(prefill_logprobs):
         unicode_idx_to_token_idx += [idx] * len(token["token"])
-    sequence_left = sequence[:]
+    sequence_remain = sequence[:]
     # using inverse order, because the newer msg is more important
     for msg in messages[::-1]:
         content = msg["content"]
         if content == "":
             continue
         if isinstance(content, str):
-            sequence_left.rfind(content)
+            start_unicode_idx = sequence_remain.rfind(content)
+            assert start_unicode_idx >= 0, f"Should '{content}' in '{sequence_remain}'"
+            start_token_idx = unicode_idx_to_token_idx[start_unicode_idx]
+            end_unicode_idx = (
+                start_unicode_idx + len(content) + 1
+            )  # plus 1 for <|stop|> token
+            end_token_idx = unicode_idx_to_token_idx[end_unicode_idx]
+            msg["prefill_logprobs"] = prefill_logprobs[
+                start_token_idx : end_token_idx + 1
+            ]
+            sequence_remain = sequence_remain[:start_unicode_idx]
         elif isinstance(content, list):
-            for chunk in content[::-1]:
+            for reverse_idx, chunk in enumerate(content[::-1]):
                 if chunk["type"] == "text":
-                    chunk["text"]
-    g()
+                    start_unicode_idx = sequence_remain.rfind(chunk["text"])
+                    assert (
+                        start_unicode_idx >= 0
+                    ), f"Should '{chunk['text']}' in '{sequence_remain}'"
+                    start_token_idx = unicode_idx_to_token_idx[start_unicode_idx]
+                    end_unicode_idx = start_unicode_idx + len(chunk["text"])
+                    # plus 1 for <|stop|> token if is last chunk
+                    if reverse_idx == 0:
+                        end_unicode_idx += 1
+                    end_token_idx = unicode_idx_to_token_idx[end_unicode_idx]
+                    chunk["prefill_logprobs"] = prefill_logprobs[
+                        start_token_idx : end_token_idx + 1
+                    ]
+                    sequence_remain = sequence_remain[:start_unicode_idx]
+    return messages
 
 
 if __name__ == "__main__":
@@ -93,18 +126,12 @@ if __name__ == "__main__":
     chat = ChatAPI.free_api()
 
     msgs = [
-        {"role": "system", "content": ""},
-        {"role": "user", "content": "5+6="},
-        # {"role": "assistant", "content": "21"},
-        # {"role": "assistant", "content": "11"},
-        {"role": "assistant", "content": "prefix 🥢subfix"},
+        # {"role": "system", "content": ""},
+        {"role": "user", "content": "5+7=?"},
+        # {"role": "user","content": [{"type": "text", "text": "5+7"},{"type": "text", "text": "=?"},],},  # test chunk content
+        {"role": "assistant", "content": "32"},
+        # {"role": "assistant", "content": "12"},
+        # {"role": "assistant", "content": "prefix 🥢subfix"},  # test tokenizer
     ]
-    response = compute_prompt_logprobs(chat, msgs)
-    prefill_logprobs = response["prefill_logprobs"]
-
-    seqence = prefill_logprobs_to_sequence(prefill_logprobs)
-
-    msgs_with_prompt_logprobs = align_prefill_logprobs_to_messages(
-        prefill_logprobs, msgs
-    )
-    print(seqence)
+    msgs_with_prefill_logprobs = compute_prefill_logprobs(chat, msgs)
+    tree(msgs_with_prefill_logprobs)

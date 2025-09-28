@@ -135,6 +135,11 @@ class ChatAPI:
                 d["choices"][0]["message"] = dict(content=d["choices"][0]["text"])
         return d
 
+    def prefill_logprobs(self, messages):
+        from .prefill_logprobs import compute_prefill_logprobs
+
+        return compute_prefill_logprobs(self, messages)
+
     def __call__(
         self, messages=None, return_messages=False, return_dict=False, **kwargs_
     ):
