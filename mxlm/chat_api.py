@@ -31,7 +31,10 @@ class ChatAPI:
         if model is None and base_url and ":" not in base_url and "/" not in base_url:
             base_url, model = model, base_url
         self.base_url = (
-            base_url or self.default_base_url or os.environ.get("OPENAI_BASE_URL")
+            base_url
+            or self.default_base_url
+            or os.environ.get("OPENAI_BASE_URL")
+            or "https://api.openai.com/v1"
         )
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "sk-NoneKey")
 
