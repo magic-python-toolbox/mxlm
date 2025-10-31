@@ -9,7 +9,7 @@ app = Flask(__name__)
 @app.route("/", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 @app.route("/<path:path>", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 def proxy(path=""):
-    target_url = f"{args.target}/{path}"
+    target_url = f"{args.target.rstrip('/')}/{path}" if path else args.target
 
     # Print request information
     print(f"\n{'='*50}")
@@ -31,8 +31,15 @@ def proxy(path=""):
         headers={key: value for key, value in request.headers if key != "Host"},
         data=request.data,
         cookies=request.cookies,
-        allow_redirects=False,
+        allow_redirects=True,
     )
+
+    if resp.history:
+        print("Redirect history:")
+        for previous in resp.history:
+            location = previous.headers.get("Location", "<unknown>")
+            print(f"  {previous.status_code} -> {location}")
+        print(f"Final URL: {resp.url}")
 
     # Print response information
     print(f"\nResponse Status: {resp.status_code}")
