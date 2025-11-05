@@ -14,7 +14,7 @@ class ChatAPI:
 
     def __init__(
         self,
-        base_url=None,  # try get OPENAI_BASE_URL env
+        base_url=None,  # try get MXLM_BASE_URL, OPENAI_BASE_URL env
         api_key=None,  # try get OPENAI_API_KEY env
         model=None,
         temperature=0.5,
@@ -32,8 +32,9 @@ class ChatAPI:
             base_url, model = model, base_url
         self.base_url = (
             base_url
-            or self.default_base_url
+            or os.environ.get("MXLM_BASE_URL")
             or os.environ.get("OPENAI_BASE_URL")
+            or self.default_base_url
             or "https://api.openai.com/v1"
         )
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "sk-NoneKey")
