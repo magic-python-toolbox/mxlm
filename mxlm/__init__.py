@@ -18,6 +18,7 @@ from .mxlm_utils import (
 )
 from .random_utils import shuffle_loop_with_seed
 from .prefill_logprobs import prompt_logprobs_request_kwargs
+from .hijack_chat_api import hijack_chat_api, decode_url_config_path
 
 # Not imported by default
 # from .richtext import *
