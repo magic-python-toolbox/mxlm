@@ -42,7 +42,7 @@ import requests
 __version__ = "1.1.1"
 __all__ = ["OpenAI"]
 DEFAULT_MAX_RETRIES = 2
-DEFAULT_TIMEOUT = 600  # seconds
+DEFAULT_TIMEOUT = 2 * 3600  # seconds
 DEFAULT_CONNECTION_LIMITS = {
     "max_connections": 1000,
     "max_keepalive_connections": 100,
@@ -163,7 +163,7 @@ class OpenAI:
             url,
             headers=self._headers,
             json=json_body,
-            timeout=request_kwargs.pop("timeout", 600),  # sensible default
+            timeout=request_kwargs.pop("timeout", DEFAULT_TIMEOUT),  # sensible default
             **request_kwargs,
         )
 

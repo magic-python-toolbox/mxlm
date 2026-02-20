@@ -17,9 +17,10 @@ class ChatAPI:
         base_url=None,  # try get MXLM_BASE_URL, OPENAI_BASE_URL env
         api_key=None,  # try get OPENAI_API_KEY env
         model=None,
-        temperature=0.5,
-        max_tokens=1920,  # avoid 2k context model error
-        top_p=0.9,
+        temperature=0.8,
+        max_tokens=15360,  # avoid 16k context model error
+        top_p=0.95,
+        parser=None,  # callable parser to process message dict (reasoning, tool calls, etc.)
         **default_kwargs,
     ):
         # import openai as openai
@@ -56,6 +57,7 @@ class ChatAPI:
             top_p=top_p,
         )
         self.default_kwargs.update(default_kwargs)
+        self.parser = parser
 
     def get_model_list(self):
         return self.client.models.list().dict()["data"]
@@ -202,6 +204,8 @@ class ChatAPI:
 
         if cache and not in_cache:
             cache_manager.set_cache(d)
+        if callable(self.parser):
+            d["choices"][0]["message"] = self.parser(d["choices"][0]["message"])
         if return_messages or return_dict:
             d["new_messages"] = messages + [d["choices"][0]["message"]]
             if return_dict:
