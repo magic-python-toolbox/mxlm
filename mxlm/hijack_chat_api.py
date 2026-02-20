@@ -174,7 +174,9 @@ def hijack_chat_api(
             stream=False,
         )
         resp_headers = normalize_response_headers(upstream.headers)
-        return Response(upstream.content, status=upstream.status_code, headers=resp_headers)
+        return Response(
+            upstream.content, status=upstream.status_code, headers=resp_headers
+        )
 
     def handle_hijack(subpath, url_config):
         request_method = request.method
@@ -183,7 +185,9 @@ def hijack_chat_api(
         req_headers = dict(request.headers.items())
 
         if subpath != "chat/completions":
-            return proxy_plain(subpath, req_headers, request_method, request_body, request_query)
+            return proxy_plain(
+                subpath, req_headers, request_method, request_body, request_query
+            )
 
         body = _parse_request_json(request_body)
         stream_flag = bool(body.get("stream"))
@@ -276,11 +280,17 @@ def hijack_chat_api(
                         message, extra_info=extra_info, stream=False
                     )
                     result_q.put(
-                        ("chunk", json.dumps(resp_obj, ensure_ascii=False).encode("utf-8"))
+                        (
+                            "chunk",
+                            json.dumps(resp_obj, ensure_ascii=False).encode("utf-8"),
+                        )
                     )
                 result_q.put(("done", None))
             except Exception as e:
-                print("[hijack_chat_api] traceback:\n" + traceback.format_exc(), flush=True)
+                print(
+                    "[hijack_chat_api] traceback:\n" + traceback.format_exc(),
+                    flush=True,
+                )
                 payload = {"error": {"message": str(e), "type": "proxy_error"}}
                 result_q.put(("error", payload))
                 result_q.put(("done", None))
@@ -328,7 +338,9 @@ def hijack_chat_api(
                                 "utf-8"
                             )
                         else:
-                            yield json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                            yield json.dumps(payload, ensure_ascii=False).encode(
+                                "utf-8"
+                            )
                     elif kind == "done":
                         break
                 except queue.Empty:

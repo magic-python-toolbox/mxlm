@@ -102,7 +102,12 @@ def create_app(base_urls, api_keys, new_api_key=None):
             auth = request.headers.get("Authorization", "")
             expect = f"Bearer {new_api_key}"
             if auth != expect:
-                return jsonify({"error": {"message": "unauthorized", "type": "auth_error"}}), 401
+                return (
+                    jsonify(
+                        {"error": {"message": "unauthorized", "type": "auth_error"}}
+                    ),
+                    401,
+                )
 
     @app.after_request
     def add_cors(resp):
@@ -143,7 +148,11 @@ def create_app(base_urls, api_keys, new_api_key=None):
         body = parse_body_json()
         req_model = body.get("model", "") if isinstance(body, dict) else ""
         selected_idx = 0
-        if isinstance(req_model, str) and req_model.startswith("u") and ":" in req_model:
+        if (
+            isinstance(req_model, str)
+            and req_model.startswith("u")
+            and ":" in req_model
+        ):
             prefix, _rest = req_model.split(":", 1)
             if prefix[1:].isdigit():
                 idx = int(prefix[1:])
@@ -185,8 +194,12 @@ def create_app(base_urls, api_keys, new_api_key=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base_url", required=True, help="Comma-separated base URLs")
-    parser.add_argument("--api_key", default="", help="Optional comma-separated API keys")
-    parser.add_argument("--new_api_key", default="", help="Optional key for this aggregate API")
+    parser.add_argument(
+        "--api_key", default="", help="Optional comma-separated API keys"
+    )
+    parser.add_argument(
+        "--new_api_key", default="", help="Optional key for this aggregate API"
+    )
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=9400)
     parser.add_argument("--debug", action="store_true")
@@ -203,7 +216,13 @@ def main():
     print("  - exact model id from /models mapping")
     print("  - or aggregate_api_key like u1:model_name")
 
-    app.run(host=args.host, port=args.port, threaded=True, debug=args.debug, use_reloader=args.debug)
+    app.run(
+        host=args.host,
+        port=args.port,
+        threaded=True,
+        debug=args.debug,
+        use_reloader=args.debug,
+    )
 
 
 if __name__ == "__main__":
