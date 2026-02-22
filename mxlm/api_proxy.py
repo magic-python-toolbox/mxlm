@@ -52,7 +52,15 @@ def proxy(path=""):
 
     # Return response
     response = Response(resp.content, resp.status_code)
+    blocked_headers = {
+        "content-length",
+        "transfer-encoding",
+        "content-encoding",
+        "connection",
+    }
     for key, value in resp.headers.items():
+        if key.lower() in blocked_headers:
+            continue
         response.headers[key] = value
     return response
 
