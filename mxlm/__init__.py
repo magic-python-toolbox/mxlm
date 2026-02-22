@@ -13,6 +13,7 @@ from .mxlm_utils import (
     messages_to_sequence,
     messages_to_condition_key,
     sanity_check_messages,
+    normalize_messages,
     bbcode_to_markdown_math,
     hash_object_sha256_base64,
 )

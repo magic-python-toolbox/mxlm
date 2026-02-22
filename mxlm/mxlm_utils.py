@@ -7,6 +7,7 @@ Created on Fri Mar 29 16:15:58 2024
 """
 import os
 import json
+import copy
 
 
 def df_to_html(df, *args, max_width=400, HTML_WIDTH_PER_CHAR=8, **argkws):
@@ -121,6 +122,22 @@ def bbcode_to_markdown_math(messages):  # inplace
                 .replace("\\(", "$")
                 .replace("\\)", "$")
             )
+    return messages
+
+
+def normalize_messages(messages):
+    messages = copy.deepcopy(messages)
+    for msg in messages:
+        # Avoid error "Expected 'text' field in text type content part to be a string"
+        if msg["role"] == "user" and isinstance(msg["content"], list):
+            for chunk in msg["content"][:]:
+                if chunk.get("type") == "text" and not chunk.get(
+                    "text", chunk.get("value", "")
+                ):
+                    msg["content"].remove(chunk)
+    # Avoid error "the message at position 0 with role 'system' must not be empty" in Kimi-API
+    if messages[0]["role"] == "system" and not messages[0]["content"]:
+        messages = messages[1:]
     return messages
 
 
