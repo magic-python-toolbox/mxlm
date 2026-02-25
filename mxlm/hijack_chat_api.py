@@ -357,13 +357,15 @@ def hijack_chat_api(
     @app.route(f"/{path_prefix}/<path:url_config_and_v1>", methods=ALL_METHODS)
     def _hijack_with_url_config(url_config_and_v1):
         marker = "/v1/"
-        if marker in url_config_and_v1:
-            url_config_path, subpath = url_config_and_v1.split(marker, 1)
+        marker_idx = url_config_and_v1.rfind(marker)
+        if marker_idx >= 0:
+            url_config_path = url_config_and_v1[:marker_idx]
+            subpath = url_config_and_v1[marker_idx + len(marker) :]
         elif url_config_and_v1.endswith("/v1"):
             url_config_path = url_config_and_v1[: -len("/v1")]
             subpath = ""
         else:
-            return jsonify({"error": "path must include /v1/"}), 400
+            return jsonify({"error": "path must include /v1/ or end with /v1"}), 400
 
         url_config = decode_url_config_path(url_config_path)
         return handle_hijack(subpath, url_config)
