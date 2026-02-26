@@ -2,7 +2,7 @@ import argparse
 import json
 
 import requests
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, redirect, request
 
 
 ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
@@ -18,18 +18,18 @@ def split_csv_arg(value):
     return [x.strip() for x in s.split(",") if x.strip()]
 
 
-def normalize_upstreams(base_url, api_key):
-    base_urls = split_csv_arg(base_url) or []
+def normalize_upstreams(base_urls, api_keys):
+    base_urls = split_csv_arg(base_urls) or []
     if not base_urls:
-        raise ValueError("base_url is required")
+        raise ValueError("base_urls is required")
 
-    keys = split_csv_arg(api_key)
+    keys = split_csv_arg(api_keys)
     if keys is None or len(keys) == 0:
         api_keys = [None] * len(base_urls)
     elif len(keys) == len(base_urls):
         api_keys = keys
     else:
-        raise ValueError("api_key must be None or same length as base_url")
+        raise ValueError("api_keys must be empty or same length as base_urls")
 
     return base_urls, api_keys
 
@@ -70,9 +70,37 @@ def parse_body_json():
         return {}
 
 
-def create_app(base_urls, api_keys, new_api_key=None):
+def create_app(base_urls, api_keys, new_api_key=None, debug=False):
     app = Flask(__name__)
     model_to_upstream_idx = {}
+
+    def debug_print(title, value=None):
+        if not debug:
+            return
+        if value is None:
+            print(title, flush=True)
+        else:
+            print(f"{title}: {value}", flush=True)
+
+    def debug_dump_response_body(content_bytes):
+        if not debug:
+            return
+        text = content_bytes.decode("utf-8", errors="replace")
+        try:
+            parsed = json.loads(text)
+            pretty = json.dumps(parsed, ensure_ascii=False, indent=2)
+        except Exception:
+            limit = 4000
+            pretty = text if len(text) <= limit else text[:limit] + "\n... (truncated)"
+        debug_print("[aggregate_apis][debug] response body", pretty)
+
+    @app.route("/", methods=["GET"])
+    def root_redirect():
+        return redirect("/v1/models", code=302)
+
+    @app.route("/v1", methods=["GET"])
+    def v1_redirect():
+        return redirect("/v1/models", code=302)
 
     def refresh_model_map():
         nonlocal model_to_upstream_idx
@@ -91,6 +119,10 @@ def create_app(base_urls, api_keys, new_api_key=None):
             except Exception:
                 continue
         model_to_upstream_idx = new_map
+        debug_print(
+            "[aggregate_apis][debug] refreshed model map size",
+            len(model_to_upstream_idx),
+        )
 
     refresh_model_map()
 
@@ -117,11 +149,28 @@ def create_app(base_urls, api_keys, new_api_key=None):
         resp.headers["Access-Control-Allow-Headers"] = req_headers
         resp.headers["Access-Control-Allow-Methods"] = req_method
         resp.headers["Access-Control-Max-Age"] = "86400"
+        debug_print("[aggregate_apis][debug] response status", resp.status_code)
+        debug_print("[aggregate_apis][debug] response headers", dict(resp.headers))
+        if debug:
+            print(f"{'='*60}\n", flush=True)
         return resp
 
     @app.route("/v1/", defaults={"subpath": ""}, methods=ALL_METHODS)
     @app.route("/v1/<path:subpath>", methods=ALL_METHODS)
     def proxy(subpath):
+        if request.method == "GET" and subpath == "":
+            return redirect("/v1/models", code=302)
+
+        request_query = request.query_string.decode("utf-8")
+        request_headers = dict(request.headers)
+        request_body = request.get_data()
+        if debug:
+            print(f"\n{'='*60}", flush=True)
+            debug_print("[aggregate_apis][debug] request method", request.method)
+            debug_print("[aggregate_apis][debug] request path", f"/v1/{subpath}")
+            debug_print("[aggregate_apis][debug] request query", request_query or "-")
+            debug_print("[aggregate_apis][debug] request headers", request_headers)
+
         if subpath == "models" and request.method in {"GET", "POST"}:
             refresh_model_map()
             merged = []
@@ -135,7 +184,9 @@ def create_app(base_urls, api_keys, new_api_key=None):
                     for it in items:
                         if isinstance(it, dict):
                             item = dict(it)
-                            item["aggregate_api_key"] = f"u{idx}:{item.get('id', '')}"
+                            item["aggregate_api_key"] = (
+                                f"base_url{idx}:{item.get('id', '')}"
+                            )
                             item["aggregate_upstream_index"] = idx
                             item["aggregate_upstream_base_url"] = bu
                             merged.append(item)
@@ -143,43 +194,75 @@ def create_app(base_urls, api_keys, new_api_key=None):
                             merged.append(it)
                 except Exception:
                     continue
+            debug_print("[aggregate_apis][debug] merged models count", len(merged))
             return jsonify({"object": "list", "data": merged})
 
         body = parse_body_json()
+        stream_flag = bool(body.get("stream")) if isinstance(body, dict) else False
+        if request_body:
+            if body:
+                debug_print(
+                    "[aggregate_apis][debug] request body",
+                    json.dumps(body, ensure_ascii=False, indent=2),
+                )
+            else:
+                debug_print(
+                    "[aggregate_apis][debug] request body",
+                    request_body.decode("utf-8", errors="replace"),
+                )
         req_model = body.get("model", "") if isinstance(body, dict) else ""
         selected_idx = 0
+        route_reason = "fallback to upstream[0]"
         if (
             isinstance(req_model, str)
-            and req_model.startswith("u")
+            and req_model.startswith("base_url")
             and ":" in req_model
         ):
             prefix, _rest = req_model.split(":", 1)
-            if prefix[1:].isdigit():
-                idx = int(prefix[1:])
+            idx_str = prefix[len("base_url") :]
+            if idx_str.isdigit():
+                idx = int(idx_str)
                 if 0 <= idx < len(base_urls):
                     selected_idx = idx
+                    route_reason = "aggregate_api_key prefix"
         elif req_model in model_to_upstream_idx:
             selected_idx = model_to_upstream_idx[req_model]
+            route_reason = "exact model id mapping"
 
         bu = base_urls[selected_idx]
         ak = api_keys[selected_idx]
         url = build_upstream_url(bu, subpath)
-        qs = request.query_string.decode("utf-8")
-        if qs:
-            url = f"{url}?{qs}"
+        if request_query:
+            url = f"{url}?{request_query}"
+        debug_print("[aggregate_apis][debug] request model", req_model or "-")
+        debug_print("[aggregate_apis][debug] route reason", route_reason)
+        debug_print("[aggregate_apis][debug] selected upstream index", selected_idx)
+        debug_print("[aggregate_apis][debug] target url", url)
 
         headers = build_upstream_headers(ak)
         upstream = requests.request(
             method=request.method,
             url=url,
             headers=headers,
-            data=request.get_data(),
+            data=request_body,
             allow_redirects=False,
             timeout=UPSTREAM_TIMEOUT,
             stream=True,
         )
+        if debug:
+            debug_print("[aggregate_apis][debug] upstream status", upstream.status_code)
+            debug_print(
+                "[aggregate_apis][debug] upstream headers",
+                dict(upstream.headers.items()),
+            )
 
         resp_headers = normalize_response_headers(upstream.headers)
+        if debug and not stream_flag:
+            response_body = upstream.content
+            debug_dump_response_body(response_body)
+            return Response(
+                response_body, status=upstream.status_code, headers=resp_headers
+            )
 
         def gen():
             for chunk in upstream.iter_content(chunk_size=8192):
@@ -192,10 +275,21 @@ def create_app(base_urls, api_keys, new_api_key=None):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--base_url", required=True, help="Comma-separated base URLs")
+    parser = argparse.ArgumentParser(
+        description="Aggregate multiple OpenAI-compatible upstream APIs into one /v1 endpoint.",
+        epilog=(
+            "Model routing priority:\n"
+            "  1) aggregate_api_key like base_url1:model_name\n"
+            "  2) exact model id from /v1/models mapping\n"
+            "  3) fallback to upstream[0]\n"
+            "Duplicate model ids in mapping: first upstream in --base_urls wins."
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument("--base_urls", required=True, help="Comma-separated base URLs")
     parser.add_argument(
-        "--api_key", default="", help="Optional comma-separated API keys"
+        "--api_keys", default="", help="Optional comma-separated API keys"
     )
     parser.add_argument(
         "--new_api_key", default="", help="Optional key for this aggregate API"
@@ -205,16 +299,22 @@ def main():
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
-    base_urls, api_keys = normalize_upstreams(args.base_url, args.api_key)
-    app = create_app(base_urls, api_keys, new_api_key=args.new_api_key or None)
+    base_urls, api_keys = normalize_upstreams(args.base_urls, args.api_keys)
+    app = create_app(
+        base_urls,
+        api_keys,
+        new_api_key=args.new_api_key or None,
+        debug=args.debug,
+    )
 
     print(f"[aggregate_apis] listening on http://{args.host}:{args.port}")
     print("[aggregate_apis] routes:")
     print("  - /v1/models (aggregate + refresh model routing map)")
     print("  - /v1/* (route by model, fallback to upstream[0])")
-    print("[aggregate_apis] model routing:")
-    print("  - exact model id from /models mapping")
-    print("  - or aggregate_api_key like u1:model_name")
+    print("[aggregate_apis] model routing priority:")
+    print("  1) aggregate_api_key like base_url1:model_name")
+    print("  2) exact model id from /models mapping")
+    print("  3) fallback to upstream[0]")
 
     app.run(
         host=args.host,
