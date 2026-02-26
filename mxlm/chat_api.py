@@ -204,6 +204,16 @@ class ChatAPI:
 
         if cache and not in_cache:
             cache_manager.set_cache(d)
+        if kwargs.get("continue_final_message") and kwargs.get("echo"):
+            # ensure echo=True is effective for old API
+            prefix = messages[-1].get("content")
+            response_content = d["choices"][0]["message"].get("content")
+            if (
+                isinstance(prefix, str)
+                and isinstance(response_content, str)
+                and not response_content.startswith(prefix)
+            ):
+                d["choices"][0]["message"]["content"] = prefix + response_content
         if callable(self.parser):
             d["choices"][0]["message"] = self.parser(d["choices"][0]["message"])
         if return_messages or return_dict:
