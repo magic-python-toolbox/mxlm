@@ -2,6 +2,7 @@ import requests
 import argparse
 from flask import Flask, request, Response
 import json
+from pprint import pformat
 
 app = Flask(__name__)
 
@@ -15,12 +16,12 @@ def proxy(path=""):
     print(f"\n{'='*50}")
     print(f"Request Method: {request.method}")
     print(f"Target URL: {target_url}")
-    print(f"Request Headers: {dict(request.headers)}")
+    print(f"Request Headers: {pformat(dict(request.headers), sort_dicts=False)}")
 
     if request.data:
         try:
             body = json.loads(request.data)
-            print(f"Request Body: {json.dumps(body, ensure_ascii=False, indent=2)}")
+            print(f"Request Body: {pformat(body, sort_dicts=False)}")
         except:
             print(f"Request Body: {request.data}")
 
@@ -43,9 +44,9 @@ def proxy(path=""):
 
     # Print response information
     print(f"\nResponse Status: {resp.status_code}")
-    print(f"Response Headers: {dict(resp.headers)}")
+    print(f"Response Headers: {pformat(dict(resp.headers), sort_dicts=False)}")
     try:
-        print(f"Response Body: {json.dumps(resp.json(), ensure_ascii=False, indent=2)}")
+        print(f"Response Body: {pformat(resp.json(), sort_dicts=False)}")
     except:
         print(f"Response Body: {resp.text[:200]}...")
     print(f"{'='*50}\n")

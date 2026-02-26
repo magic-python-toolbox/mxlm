@@ -1,8 +1,9 @@
 import argparse
 import json
+from pprint import pformat
 
 import requests
-from flask import Flask, Response, jsonify, redirect, request
+from flask import Flask, Response, has_request_context, jsonify, redirect, request
 
 
 ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
@@ -43,11 +44,12 @@ def build_upstream_url(base_url, subpath):
 
 def build_upstream_headers(api_key):
     headers = {}
-    for k, v in request.headers.items():
-        lk = k.lower()
-        if lk in {"host", "content-length", "connection"}:
-            continue
-        headers[k] = v
+    if has_request_context():
+        for k, v in request.headers.items():
+            lk = k.lower()
+            if lk in {"host", "content-length", "connection"}:
+                continue
+            headers[k] = v
     if api_key and api_key != "no-key":
         headers["Authorization"] = f"Bearer {api_key}"
     return headers
@@ -80,15 +82,18 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
         if value is None:
             print(title, flush=True)
         else:
-            print(f"{title}: {value}", flush=True)
+            if isinstance(value, str):
+                formatted = value
+            else:
+                formatted = pformat(value, sort_dicts=False)
+            print(f"{title}: {formatted}", flush=True)
 
     def debug_dump_response_body(content_bytes):
         if not debug:
             return
         text = content_bytes.decode("utf-8", errors="replace")
         try:
-            parsed = json.loads(text)
-            pretty = json.dumps(parsed, ensure_ascii=False, indent=2)
+            pretty = json.loads(text)
         except Exception:
             limit = 4000
             pretty = text if len(text) <= limit else text[:limit] + "\n... (truncated)"
@@ -102,21 +107,30 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
     def v1_redirect():
         return redirect("/v1/models", code=302)
 
-    def refresh_model_map():
+    def refresh_model_map(strict=False):
         nonlocal model_to_upstream_idx
         new_map = {}
         for idx, bu in enumerate(base_urls):
+            url = build_upstream_url(bu, "models")
             try:
-                url = build_upstream_url(bu, "models")
                 headers = build_upstream_headers(api_keys[idx])
                 r = requests.get(url, headers=headers, timeout=UPSTREAM_TIMEOUT)
+                r.raise_for_status()
                 d = r.json()
                 items = d.get("data", []) if isinstance(d, dict) else []
                 for it in items:
                     model_id = it.get("id") if isinstance(it, dict) else None
                     if model_id and model_id not in new_map:
                         new_map[model_id] = idx
-            except Exception:
+            except Exception as e:
+                debug_print(
+                    "[aggregate_apis][debug] refresh model map failed",
+                    f"upstream[{idx}] {url}: {e}",
+                )
+                if strict:
+                    raise RuntimeError(
+                        f"initial /models fetch failed: upstream[{idx}] {url}: {e}"
+                    ) from e
                 continue
         model_to_upstream_idx = new_map
         debug_print(
@@ -124,7 +138,7 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
             len(model_to_upstream_idx),
         )
 
-    refresh_model_map()
+    refresh_model_map(strict=True)
 
     @app.before_request
     def auth_and_preflight():
@@ -201,10 +215,7 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
         stream_flag = bool(body.get("stream")) if isinstance(body, dict) else False
         if request_body:
             if body:
-                debug_print(
-                    "[aggregate_apis][debug] request body",
-                    json.dumps(body, ensure_ascii=False, indent=2),
-                )
+                debug_print("[aggregate_apis][debug] request body", body)
             else:
                 debug_print(
                     "[aggregate_apis][debug] request body",
