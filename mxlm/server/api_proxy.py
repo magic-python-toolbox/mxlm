@@ -11,6 +11,12 @@ app = Flask(__name__)
 @app.route("/<path:path>", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 def proxy(path=""):
     target_url = f"{args.target.rstrip('/')}/{path}" if path else args.target
+    request_query = request.query_string.decode("utf-8")
+    if request_query:
+        target_url = f"{target_url}?{request_query}"
+
+    body = None
+    stream_flag = "text/event-stream" in request.headers.get("Accept", "").lower()
 
     # Print request information
     print(f"\n{'='*50}")
@@ -22,6 +28,7 @@ def proxy(path=""):
         try:
             body = json.loads(request.data)
             print(f"Request Body: {pformat(body, sort_dicts=False)}")
+            stream_flag = stream_flag or bool(body.get("stream"))
         except:
             print(f"Request Body: {request.data}")
 
@@ -33,6 +40,7 @@ def proxy(path=""):
         data=request.data,
         cookies=request.cookies,
         allow_redirects=True,
+        stream=stream_flag,
     )
 
     if resp.history:
@@ -45,14 +53,23 @@ def proxy(path=""):
     # Print response information
     print(f"\nResponse Status: {resp.status_code}")
     print(f"Response Headers: {pformat(dict(resp.headers), sort_dicts=False)}")
-    try:
-        print(f"Response Body: {pformat(resp.json(), sort_dicts=False)}")
-    except:
-        print(f"Response Body: {resp.text[:200]}...")
+    if stream_flag:
+        print("Response Body: <streaming response>")
+    else:
+        try:
+            print(f"Response Body: {pformat(resp.json(), sort_dicts=False)}")
+        except:
+            print(f"Response Body: {resp.text[:200]}...")
     print(f"{'='*50}\n")
 
     # Return response
-    response = Response(resp.content, resp.status_code)
+    if stream_flag:
+        response = Response(
+            (chunk for chunk in resp.iter_content(chunk_size=8192) if chunk),
+            resp.status_code,
+        )
+    else:
+        response = Response(resp.content, resp.status_code)
     blocked_headers = {
         "content-length",
         "transfer-encoding",

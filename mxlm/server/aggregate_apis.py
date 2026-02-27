@@ -75,6 +75,8 @@ def parse_body_json():
 def create_app(base_urls, api_keys, new_api_key=None, debug=False):
     app = Flask(__name__)
     model_to_upstream_idx = {}
+    response_to_upstream_idx = {}
+    response_to_model = {}
 
     def debug_print(title, value=None):
         if not debug:
@@ -98,6 +100,34 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
             limit = 4000
             pretty = text if len(text) <= limit else text[:limit] + "\n... (truncated)"
         debug_print("[aggregate_apis][debug] response body", pretty)
+
+    def extract_response_id(subpath):
+        if not subpath.startswith("responses/"):
+            return ""
+        parts = subpath.split("/")
+        if len(parts) < 2:
+            return ""
+        return parts[1]
+
+    def cache_response_upstream(
+        subpath, method, stream_flag, selected_idx, content_bytes
+    ):
+        if method != "POST" or subpath != "responses" or stream_flag:
+            return
+        try:
+            payload = json.loads(content_bytes.decode("utf-8"))
+        except Exception:
+            return
+        response_id = payload.get("id") if isinstance(payload, dict) else None
+        if isinstance(response_id, str) and response_id:
+            response_to_upstream_idx[response_id] = selected_idx
+            debug_print("[aggregate_apis][debug] cached response id", response_id)
+            response_model = payload.get("model") if isinstance(payload, dict) else None
+            if isinstance(response_model, str) and response_model:
+                response_to_model[response_id] = response_model
+                debug_print(
+                    "[aggregate_apis][debug] cached response model", response_model
+                )
 
     @app.route("/", methods=["GET"])
     def root_redirect():
@@ -222,6 +252,7 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
                     request_body.decode("utf-8", errors="replace"),
                 )
         req_model = body.get("model", "") if isinstance(body, dict) else ""
+        req_response_id = extract_response_id(subpath)
         selected_idx = 0
         route_reason = "fallback to upstream[0]"
         if (
@@ -239,6 +270,9 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
         elif req_model in model_to_upstream_idx:
             selected_idx = model_to_upstream_idx[req_model]
             route_reason = "exact model id mapping"
+        elif req_response_id in response_to_upstream_idx:
+            selected_idx = response_to_upstream_idx[req_response_id]
+            route_reason = "response id mapping"
 
         bu = base_urls[selected_idx]
         ak = api_keys[selected_idx]
@@ -246,11 +280,17 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
         if request_query:
             url = f"{url}?{request_query}"
         debug_print("[aggregate_apis][debug] request model", req_model or "-")
+        debug_print(
+            "[aggregate_apis][debug] request response id", req_response_id or "-"
+        )
         debug_print("[aggregate_apis][debug] route reason", route_reason)
         debug_print("[aggregate_apis][debug] selected upstream index", selected_idx)
         debug_print("[aggregate_apis][debug] target url", url)
 
         headers = build_upstream_headers(ak)
+        cached_response_model = response_to_model.get(req_response_id)
+        if cached_response_model and not headers.get("X-Model"):
+            headers["X-Model"] = cached_response_model
         upstream = requests.request(
             method=request.method,
             url=url,
@@ -268,6 +308,17 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
             )
 
         resp_headers = normalize_response_headers(upstream.headers)
+        if not stream_flag and subpath == "responses" and request.method == "POST":
+            response_body = upstream.content
+            cache_response_upstream(
+                subpath, request.method, stream_flag, selected_idx, response_body
+            )
+            if debug:
+                debug_dump_response_body(response_body)
+            return Response(
+                response_body, status=upstream.status_code, headers=resp_headers
+            )
+
         if debug and not stream_flag:
             response_body = upstream.content
             debug_dump_response_body(response_body)
