@@ -1,6 +1,5 @@
 import argparse
 import json
-from pprint import pformat
 
 import requests
 from flask import Flask, Response, has_request_context, jsonify, redirect, request
@@ -8,6 +7,39 @@ from flask import Flask, Response, has_request_context, jsonify, redirect, reque
 
 ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 UPSTREAM_TIMEOUT = (10, 4 * 60 * 60)
+JSON_TRUNCATE_LIMIT = 4000
+JSON_TRUNCATE_KEEP = 1000
+JSON_TRUNCATE_PLACEHOLDER = "\n... ({reason}) ...\n"
+
+
+def slim_json_strings(
+    data,
+    *,
+    limit=JSON_TRUNCATE_LIMIT,
+    keep=JSON_TRUNCATE_KEEP,
+    placeholder=JSON_TRUNCATE_PLACEHOLDER,
+):
+    """Recursively trim strings that exceed ``limit`` characters."""
+    if isinstance(data, dict):
+        return {
+            key: slim_json_strings(
+                value, limit=limit, keep=keep, placeholder=placeholder
+            )
+            for key, value in data.items()
+        }
+    if isinstance(data, list):
+        return [
+            slim_json_strings(value, limit=limit, keep=keep, placeholder=placeholder)
+            for value in data
+        ]
+    if isinstance(data, str):
+        if len(data) <= limit:
+            return data
+        head = data[:keep]
+        tail = data[-keep:]
+        reason = f"omitted {len(data) - 2 * keep} chars"
+        return head + placeholder.format(reason=reason) + tail
+    return data
 
 
 def split_csv_arg(value):
@@ -78,6 +110,11 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
     response_to_upstream_idx = {}
     response_to_model = {}
 
+    def pretty_json(value):
+        return json.dumps(
+            slim_json_strings(value), ensure_ascii=False, indent=2, default=str
+        )
+
     def debug_print(title, value=None):
         if not debug:
             return
@@ -87,7 +124,7 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
             if isinstance(value, str):
                 formatted = value
             else:
-                formatted = pformat(value, sort_dicts=False)
+                formatted = pretty_json(value)
             print(f"{title}: {formatted}", flush=True)
 
     def debug_dump_response_body(content_bytes):
@@ -97,9 +134,16 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
         try:
             pretty = json.loads(text)
         except Exception:
-            limit = 4000
-            pretty = text if len(text) <= limit else text[:limit] + "\n... (truncated)"
+            pretty = slim_json_strings(text)
         debug_print("[aggregate_apis][debug] response body", pretty)
+
+    def debug_dump_stream_chunk(content_bytes):
+        if not debug:
+            return
+        text = content_bytes.decode("utf-8", errors="replace")
+        debug_print(
+            "[aggregate_apis][debug] response stream chunk", slim_json_strings(text)
+        )
 
     def extract_response_id(subpath):
         if not subpath.startswith("responses/"):
@@ -307,6 +351,8 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
                 dict(upstream.headers.items()),
             )
 
+        upstream_content_type = upstream.headers.get("Content-Type", "").lower()
+        is_sse_stream = "text/event-stream" in upstream_content_type
         resp_headers = normalize_response_headers(upstream.headers)
         if not stream_flag and subpath == "responses" and request.method == "POST":
             response_body = upstream.content
@@ -329,6 +375,8 @@ def create_app(base_urls, api_keys, new_api_key=None, debug=False):
         def gen():
             for chunk in upstream.iter_content(chunk_size=8192):
                 if chunk:
+                    if debug and is_sse_stream:
+                        debug_dump_stream_chunk(chunk)
                     yield chunk
 
         return Response(gen(), status=upstream.status_code, headers=resp_headers)

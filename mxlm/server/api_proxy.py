@@ -2,9 +2,12 @@ import requests
 import argparse
 from flask import Flask, request, Response
 import json
-from pprint import pformat
 
 app = Flask(__name__)
+
+
+def pretty_json(value):
+    return json.dumps(value, ensure_ascii=False, indent=2, default=str)
 
 
 @app.route("/", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
@@ -22,12 +25,12 @@ def proxy(path=""):
     print(f"\n{'='*50}")
     print(f"Request Method: {request.method}")
     print(f"Target URL: {target_url}")
-    print(f"Request Headers: {pformat(dict(request.headers), sort_dicts=False)}")
+    print(f"Request Headers: {pretty_json(dict(request.headers))}")
 
     if request.data:
         try:
             body = json.loads(request.data)
-            print(f"Request Body: {pformat(body, sort_dicts=False)}")
+            print(f"Request Body: {pretty_json(body)}")
             stream_flag = stream_flag or bool(body.get("stream"))
         except:
             print(f"Request Body: {request.data}")
@@ -52,12 +55,12 @@ def proxy(path=""):
 
     # Print response information
     print(f"\nResponse Status: {resp.status_code}")
-    print(f"Response Headers: {pformat(dict(resp.headers), sort_dicts=False)}")
+    print(f"Response Headers: {pretty_json(dict(resp.headers))}")
     if stream_flag:
         print("Response Body: <streaming response>")
     else:
         try:
-            print(f"Response Body: {pformat(resp.json(), sort_dicts=False)}")
+            print(f"Response Body: {pretty_json(resp.json())}")
         except:
             print(f"Response Body: {resp.text[:200]}...")
     print(f"{'='*50}\n")
