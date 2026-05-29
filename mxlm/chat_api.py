@@ -1,8 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import copy
 import os
 import time
 import warnings
+
+
+def _merge_two_deltas(delta1, delta2, unmerged_keys=()):
+    merged = copy.deepcopy(delta1)
+    for key, value2 in delta2.items():
+        if key not in merged:
+            merged[key] = copy.deepcopy(value2)
+            continue
+        value1 = merged[key]
+        if key in unmerged_keys:
+            continue
+        if isinstance(value1, str) and isinstance(value2, str):
+            merged[key] = value1 + value2
+        elif isinstance(value1, (int, float)) and isinstance(value2, (int, float)):
+            assert value1 == value2, f"Number mismatch: {value1} != {value2}"
+        elif isinstance(value1, dict) and isinstance(value2, dict):
+            merged[key] = _merge_two_deltas(value1, value2, unmerged_keys)
+    return merged
 
 
 class ChatAPI:
@@ -21,6 +40,7 @@ class ChatAPI:
         max_tokens=15360,  # avoid 16k context model error
         top_p=0.95,
         parser=None,  # callable parser to process message dict (reasoning, tool calls, etc.)
+        is_reasoning=None,  # is this model a reasoning model.
         **default_kwargs,
     ):
         # import openai as openai
@@ -58,6 +78,7 @@ class ChatAPI:
         )
         self.default_kwargs.update(default_kwargs)
         self.parser = parser
+        self.is_reasoning = is_reasoning  # If set None, it will be automatically set a boolen on the first request
 
     def get_model_list(self):
         return self.client.models.list().dict()["data"]
@@ -82,25 +103,102 @@ class ChatAPI:
     def get_dict_by_chat_completions(self, messages, **kwargs):
         response = self.client.chat.completions.create(messages=messages, **kwargs)
         if kwargs.get("stream"):
-            content = ""
+            message = {}
+            printed_channel = None
+            printed_non_content = False
+            printed_any = False
+            role = None
             chunki = -1
             assert (
                 response.response.status_code == 200
             ), f"status_code: {response.response.status_code}"
+
+            def print_stream_text(channel, text):
+                nonlocal printed_channel, printed_non_content, printed_any
+                if not text:
+                    return
+                if channel == "content" and not printed_non_content:
+                    print(text, end="", flush=True)
+                    printed_any = True
+                    return
+                if printed_channel != channel:
+                    if printed_any:
+                        print()
+                    print(f"<|{channel}|>")
+                    printed_channel = channel
+                if channel != "content":
+                    printed_non_content = True
+                print(text, end="", flush=True)
+                printed_any = True
+
             for chunki, _chunk in enumerate(response):
                 chunk = _chunk.dict()
-                if not chunki:
-                    role = chunk["choices"][0]["delta"].get("role")
                 if len(chunk["choices"]):
-                    delta = chunk["choices"][0]["delta"].get("content", "")
-                    if delta:
-                        content += delta
-                        print(delta, end="")
+                    delta = chunk["choices"][0]["delta"]
+                    for key, value in delta.items():
+                        if value is None:
+                            continue
+                        if key == "tool_calls":
+                            if not value:
+                                continue
+                            tool_calls = message.get("tool_calls", [])
+                            for tool_call in value:
+                                index = tool_call["index"]
+                                function = tool_call.get("function", {})
+                                print_stream_text(
+                                    f"tool_call[{index}].function.name",
+                                    function.get("name"),
+                                )
+                                print_stream_text(
+                                    f"tool_call[{index}].function.arguments",
+                                    function.get("arguments"),
+                                )
+                                if index == len(tool_calls):
+                                    tool_calls.append(copy.deepcopy(tool_call))
+                                else:
+                                    tool_calls[index] = _merge_two_deltas(
+                                        tool_calls[index], tool_call, ["type", "id"]
+                                    )
+                            message["tool_calls"] = tool_calls
+                            continue
+                        if key == "reasoning_details":
+                            if not value:
+                                continue
+                            message["reasoning_details"] = [
+                                _merge_two_deltas(
+                                    (message.get("reasoning_details") or [{}])[0],
+                                    value[0],
+                                    ["type", "format"],
+                                )
+                            ]
+                            for detail in value:
+                                for detail_key in ["text", "content", "summary"]:
+                                    print_stream_text(
+                                        f"reasoning_details.{detail_key}",
+                                        detail.get(detail_key),
+                                    )
+                            continue
+                        if key == "sidecar":
+                            continue
+                        if key == "role":
+                            role = value
+                            continue
+                        if isinstance(value, str):
+                            message[key] = message.get(key, "") + value
+                            if key in ["content", "reasoning", "reasoning_content"]:
+                                print_stream_text(key, value)
+                            continue
+                        message[key] = copy.deepcopy(value)
                     valide_chunk = chunk
             d = valide_chunk.copy()
-            d["choices"][0]["message"] = d["choices"][0].pop("delta")
-            d["choices"][0]["message"]["content"] = content
-            d["choices"][0]["message"]["role"] = role
+            d["choices"][0].pop("delta")
+            message["content"] = message.get("content", "")
+            message["role"] = role or "assistant"
+            d["choices"][0]["message"] = {
+                key: value
+                for key, value in message.items()
+                if key in ["role", "content"] or value != ""
+            }
             finish_reason_str = f"<|{d['choices'][0]['finish_reason']}|>"
             token_usage_str = (
                 f", tokens: {d['usage']['prompt_tokens']}+{d['usage']['completion_tokens']}={d['usage']['total_tokens']}"
@@ -214,8 +312,16 @@ class ChatAPI:
                 and not response_content.startswith(prefix)
             ):
                 d["choices"][0]["message"]["content"] = prefix + response_content
+        message = d["choices"][0]["message"]
+        if self.is_reasoning is None and (
+            message.get("content") or message.get("tool_calls")
+        ):
+            self.is_reasoning = any(
+                key in message
+                for key in ["reasoning", "reasoning_content", "reasoning_details"]
+            )
         if callable(self.parser):
-            d["choices"][0]["message"] = self.parser(d["choices"][0]["message"])
+            d["choices"][0]["message"] = self.parser(message)
         if return_messages or return_dict:
             d["new_messages"] = messages + [d["choices"][0]["message"]]
             if return_dict:
@@ -240,14 +346,11 @@ class ChatAPI:
     def free_api(
         cls,
         api_key="ak-onPandaTestKey",
-        base_url="http://113.44.140.251:12692/v1",
-        model="Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4",
+        base_url="https://vllm-test-api.diyer22.com/v1",
         stream=True,
         **kwargs,
     ):
-        return cls(
-            api_key=api_key, base_url=base_url, model=model, stream=stream, **kwargs
-        )
+        return cls(api_key=api_key, base_url=base_url, stream=stream, **kwargs)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-__version__ = "0.2.7"
+__version__ = "0.2.8"
 __description__ = "Language Model Utils"
 __license__ = "MIT"
 __author__ = "DIYer22"

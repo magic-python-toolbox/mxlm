@@ -199,18 +199,31 @@ class OpenAI:
                 return next(self._event_stream)
 
         def _event_stream() -> Generator[Dict[str, Any], None, None]:
-            for line in response.iter_lines(decode_unicode=True):
-                if not line:  # keep‑alive / event delimiter
-                    continue
-                if not line.startswith("data: "):
-                    continue  # ignore comments or other fields
-                data = line[6:].strip()
+            data_lines = []
+
+            def parse_data_lines():
+                data = "".join(data_lines).strip()
+                data_lines.clear()
                 if data == "[DONE]":
-                    break
-                parsed_data = json.loads(data)
-                # Only yield chunks that have choices with valid content
-                # print(data, '\n'*2)
-                yield LikeDict(parsed_data)
+                    return None
+                return LikeDict(json.loads(data))
+
+            for raw_line in response.iter_lines(decode_unicode=False):
+                line = raw_line.decode("utf-8").rstrip("\r")
+                if not line:
+                    if data_lines:
+                        parsed_data = parse_data_lines()
+                        if parsed_data is None:
+                            break
+                        yield parsed_data
+                    continue
+                if line.startswith("data:"):
+                    data_lines.append(line[5:].lstrip(" "))
+
+            if data_lines:
+                parsed_data = parse_data_lines()
+                if parsed_data is not None:
+                    yield parsed_data
 
         return StreamResponse(response, _event_stream())
 
