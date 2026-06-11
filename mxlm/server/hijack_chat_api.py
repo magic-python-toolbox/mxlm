@@ -119,6 +119,7 @@ def hijack_chat_api(
     base_url,
     api_key=None,
     heartbeat_interval_seconds=600,
+    stream_initial_flush_delay_seconds=0.1,
     upstream_timeout=(10, 4 * 60 * 60),
     enable_cors=True,
 ):
@@ -320,13 +321,14 @@ def hijack_chat_api(
         if stream_flag and status_code == 200:
             resp_headers["Cache-Control"] = "no-cache, no-transform"
             resp_headers["X-Accel-Buffering"] = "no"
-            resp_headers["Connection"] = "keep-alive"
 
         @stream_with_context
         def generate():
             heartbeat = b": ping\n\n" if stream_flag else b" \n"
             if stream_flag and status_code == 200:
                 yield b": stream-open\n\n"
+                # Give browser devtools a chance to register very short streams.
+                time.sleep(stream_initial_flush_delay_seconds)
             while True:
                 try:
                     kind, payload = result_q.get(timeout=heartbeat_interval_seconds)
