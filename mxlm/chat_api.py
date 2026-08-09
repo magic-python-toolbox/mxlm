@@ -1,9 +1,39 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import copy
+import json
 import os
 import time
 import warnings
+
+
+_DEBUG_LOG_STRING_LIMIT = 4000
+_DEBUG_LOG_STRING_KEEP = 1000
+
+
+def _pretty_debug_json(value):
+    def slim_strings(data):
+        if isinstance(data, dict):
+            return {key: slim_strings(value) for key, value in data.items()}
+        if isinstance(data, (list, tuple)):
+            return [slim_strings(value) for value in data]
+        if isinstance(data, str) and len(data) > _DEBUG_LOG_STRING_LIMIT:
+            return (
+                data[:_DEBUG_LOG_STRING_KEEP]
+                + f"\n... (omitted {len(data) - 2 * _DEBUG_LOG_STRING_KEEP} chars) ...\n"
+                + data[-_DEBUG_LOG_STRING_KEEP:]
+            )
+        return data
+
+    return json.dumps(slim_strings(value), ensure_ascii=False, indent=2, default=str)
+
+
+def _write_debug_log(target, text):
+    if "/" in target or os.path.splitext(target)[1]:
+        with open(target, "a", encoding="utf-8") as f:
+            print(text, file=f, flush=True)
+    else:
+        print(text, flush=True)
 
 
 def _merge_two_deltas(delta1, delta2, unmerged_keys=()):
@@ -277,6 +307,16 @@ class ChatAPI:
 
         retry = kwargs.pop("retry") if "retry" in kwargs else 6
         cache = kwargs.pop("cache") if "cache" in kwargs else False
+        log_target = os.environ.get("MXLM_CHAT_API_LOG_PATH")
+        if log_target is not None:
+            endpoint = "completions" if is_completions else "chat/completions"
+            _write_debug_log(
+                log_target,
+                f"\n{'='*50}\n"
+                "Request Method: POST\n"
+                f"Target URL: {self.base_url.rstrip('/')}/{endpoint}\n"
+                f"Request Body: {_pretty_debug_json(dict(messages=messages, **kwargs))}",
+            )
         if cache:
             cache_manager = ChatRequestCacheManager(messages, cache, **kwargs)
             in_cache = cache_manager.is_in_cache()
@@ -302,6 +342,11 @@ class ChatAPI:
 
         if cache and not in_cache:
             cache_manager.set_cache(d)
+        if log_target is not None:
+            _write_debug_log(
+                log_target,
+                f"\nResponse Body: {_pretty_debug_json(d)}\n{'='*50}\n",
+            )
         if kwargs.get("continue_final_message") and kwargs.get("echo"):
             # ensure echo=True is effective for old API
             prefix = messages[-1].get("content")
@@ -335,8 +380,6 @@ class ChatAPI:
         return self.default_kwargs.get("model")
 
     def __str__(self):
-        import json
-
         kwargs_str = json.dumps(self.default_kwargs, indent=2)
         return f"mxlm.ChatAPI{tuple([self.base_url])}:\n{kwargs_str[2:-2]}"
 
