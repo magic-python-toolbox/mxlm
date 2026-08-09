@@ -74,7 +74,9 @@ def normalize_response_headers(headers):
     return out
 
 
-def build_chat_completion_response(message, extra_info=None, stream=False):
+def build_chat_completion_response(
+    message, extra_info=None, stream=False, finish_reason="stop"
+):
     now = int(time.time())
     rid = f"chatcmpl-mxlm.hijack_chat_api-{now}"
     msg = copy.deepcopy(message) if message else {"role": "assistant", "content": ""}
@@ -87,7 +89,7 @@ def build_chat_completion_response(message, extra_info=None, stream=False):
             "object": "chat.completion.chunk",
             "created": now,
             "model": "",
-            "choices": [{"index": 0, "delta": msg, "finish_reason": "stop"}],
+            "choices": [{"index": 0, "delta": msg, "finish_reason": finish_reason}],
         }
         if isinstance(extra_info, dict):
             chunk.update(copy.deepcopy(extra_info))
@@ -98,7 +100,7 @@ def build_chat_completion_response(message, extra_info=None, stream=False):
         "object": "chat.completion",
         "created": now,
         "model": "",
-        "choices": [{"index": 0, "message": msg, "finish_reason": "stop"}],
+        "choices": [{"index": 0, "message": msg, "finish_reason": finish_reason}],
     }
     if isinstance(extra_info, dict):
         resp.update(copy.deepcopy(extra_info))
@@ -133,6 +135,7 @@ def hijack_chat_api(
     process_func(body, headers, url_config) should return:
     - direct_forward: bool
     - message: dict (OpenAI-style assistant message)
+    - finish_reason: str (optional OpenAI choice finish reason, default "stop")
     - extra_info: dict (deep-copied into response root)
     - content: str (optional shortcut if message is omitted)
     """
@@ -261,11 +264,15 @@ def hijack_chat_api(
                         "content": process_ret.get("content", ""),
                     }
                 extra_info = process_ret.get("extra_info")
+                finish_reason = process_ret.get("finish_reason", "stop")
 
                 if stream_flag:
                     result_q.put(("chunk", b": hijack-stream-start\n\n"))
                     chunk_obj = build_chat_completion_response(
-                        message, extra_info=extra_info, stream=True
+                        message,
+                        extra_info=extra_info,
+                        stream=True,
+                        finish_reason=finish_reason,
                     )
                     result_q.put(
                         (
@@ -278,7 +285,10 @@ def hijack_chat_api(
                     result_q.put(("chunk", b"data: [DONE]\n\n"))
                 else:
                     resp_obj = build_chat_completion_response(
-                        message, extra_info=extra_info, stream=False
+                        message,
+                        extra_info=extra_info,
+                        stream=False,
+                        finish_reason=finish_reason,
                     )
                     result_q.put(
                         (
