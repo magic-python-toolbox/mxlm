@@ -205,6 +205,9 @@ def hash_object_sha256_base64(obj, sort_keys=True):
     import hashlib
     import base64
 
-    canonical_string = json.dumps(obj, sort_keys=sort_keys, separators=(",", ":"))
+    # ensure_ascii=False to be the same as JS JSON.stringify
+    canonical_string = json.dumps(
+        obj, sort_keys=sort_keys, separators=(",", ":"), ensure_ascii=False
+    )
     sha256_hash = hashlib.sha256(canonical_string.encode("utf-8")).digest()
     return base64.b64encode(sha256_hash).decode("utf-8")

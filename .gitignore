@@ -1,5 +1,6 @@
 ﻿# Customized
 tmp_*
+.env.local
 
 # ignore
 .vscode
