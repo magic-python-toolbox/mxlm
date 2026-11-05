@@ -202,6 +202,7 @@ class ChatAPI:
 
             for chunki, _chunk in enumerate(response):
                 chunk = _chunk.dict()
+                assert "error" not in chunk, chunk
                 if len(chunk["choices"]):
                     delta = chunk["choices"][0]["delta"]
                     for key, value in delta.items():
@@ -339,6 +340,8 @@ class ChatAPI:
             The response is the raw response, response["protocol"] tells its protocol.
             Append tool messages in the order of the tool calls, since some models match tool results
             by position instead of tool_call_id (openai_responses and gemini_generate_content sort them).
+        - continue_final_message=True (openai_chat only) continues the flat final assistant message,
+            the new message is the complete one, which replaces the final message
         - Support old completions API when set `completions=True`
         - Support cache when set `cache=True`, cache at /tmp/mxlm-tmp/cache
         """
@@ -347,13 +350,20 @@ class ChatAPI:
         messages = messages or self.default_messages
         if isinstance(messages, dict) and "messages" in messages:  # trajectory
             assert "tools" not in kwargs_, "Tools should be in the trajectory"
-            if "tools" in messages:
+            if messages.get("tools"):
                 kwargs_["tools"] = messages["tools"]
             messages = messages["messages"]
         messages = self.convert_to_messages(messages)
 
         kwargs = self.default_kwargs.copy()
         kwargs.update(kwargs_)
+        if kwargs.get("continue_final_message"):
+            assert (
+                self.protocol == "openai_chat"
+            ), "Only openai_chat supports continue_final_message"
+            assert (
+                not messages[-1].get("reasoning") and not messages[-1].get("tool_calls")
+            ), "Only the flat final message without reasoning and tool_calls can be continued for now"
         is_completions = kwargs.pop("completions") if "completions" in kwargs else False
         if not is_completions:
             for message in messages:
@@ -417,14 +427,10 @@ class ChatAPI:
             )
         d["protocol"] = self.protocol
         if kwargs.get("continue_final_message") and kwargs.get("echo"):
-            # ensure echo=True is effective for old API
+            # ensure echo=True is effective for old API, only as a backup since `startswith` may misjudge: A continuation repeating the prefix is taken as echoed, losing the prefix
             prefix = messages[-1].get("content")
-            response_content = d["choices"][0]["message"].get("content")
-            if (
-                isinstance(prefix, str)
-                and isinstance(response_content, str)
-                and not response_content.startswith(prefix)
-            ):
+            response_content = d["choices"][0]["message"].get("content") or ""
+            if isinstance(prefix, str) and not response_content.startswith(prefix):
                 d["choices"][0]["message"]["content"] = prefix + response_content
         if self.protocol == "openai_chat":
             message = dict(
@@ -444,10 +450,27 @@ class ChatAPI:
             reasoning_content = message.pop("reasoning_content", None)
             if isinstance(reasoning_content, str):
                 message["reasoning"] = message.get("reasoning") or reasoning_content
+            # Drop empty fields like the stream mode, e.g. `"reasoning": null` and `"tool_calls": []`,
+            # since a present key means a channel to onPanda
+            message = {
+                key: value
+                for key, value in message.items()
+                if key in ["role", "content"] or value
+            }
+            # Some servers finish tool calls with "stop"
+            if message.get("tool_calls") and message.get("finish_reason") == "stop":
+                message["finish_reason"] = "tool_calls"
             new_messages = [message]
         else:
             new_messages = self.api_protocol.response_to_messages(d)
         message = new_messages[-1]
+        if kwargs.get("continue_final_message"):
+            # The new message continues the final message, so merge them into the complete one
+            if not kwargs.get("echo"):  # echo has prepended the final content
+                message["content"] = messages[-1]["content"] + (
+                    message.get("content") or ""
+                )
+            messages = messages[:-1]
         if self.is_reasoning is None and (
             message.get("content") or message.get("tool_calls")
         ):
@@ -457,6 +480,9 @@ class ChatAPI:
             )
         if callable(self.parser):
             new_messages = [self.parser(message) for message in new_messages]
+            if self.protocol == "openai_chat":
+                # Keep the parsed message in the response for return_dict
+                d["choices"][0]["message"] = new_messages[-1]
         if return_traj:
             trajectory = dict(messages=messages + new_messages)
             if "tools" in kwargs:
