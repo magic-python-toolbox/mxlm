@@ -8,7 +8,6 @@ import time
 import urllib.parse
 import warnings
 
-
 _DEBUG_LOG_STRING_LIMIT = 4000
 _DEBUG_LOG_STRING_KEEP = 1000
 
@@ -364,8 +363,8 @@ class ChatAPI:
             assert (
                 self.protocol == "openai_chat"
             ), "Only openai_chat supports continue_final_message"
-            assert (
-                not messages[-1].get("reasoning") and not messages[-1].get("tool_calls")
+            assert not messages[-1].get("reasoning") and not messages[-1].get(
+                "tool_calls"
             ), "Only the flat final message without reasoning and tool_calls can be continued for now"
         is_completions = kwargs.pop("completions") if "completions" in kwargs else False
         if not is_completions:

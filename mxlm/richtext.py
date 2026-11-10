@@ -6,7 +6,6 @@ Created on Thu May  9 17:08:56 2024
 @author: yl
 """
 
-
 import re
 
 
@@ -27,9 +26,7 @@ def recovery_copyed_richtext_to_markdown(text):
 
 
 if __name__ == "__main__":
-    print(
-        richtext_to_markdown(
-            """1.xxxxxx
+    print(richtext_to_markdown("""1.xxxxxx
 2.xxxx
 3.xxxx
 13.xx 5.xx
@@ -39,17 +36,11 @@ if __name__ == "__main__":
 - yyyyyyy
 
 6、xxxx
-7、 xxxx"""
-        )
-    )
+7、 xxxx"""))
 
-    print(
-        recovery_copyed_richtext_to_markdown(
-            """
+    print(recovery_copyed_richtext_to_markdown("""
   yyyyy
     yyyyy
     yyyyy
      xxxx
-     """
-        )
-    )
+     """))

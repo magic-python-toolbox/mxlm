@@ -6,7 +6,6 @@ import time
 import traceback
 import urllib.parse
 
-
 ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 
 

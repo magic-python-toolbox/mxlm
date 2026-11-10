@@ -87,14 +87,12 @@ def proxy(path=""):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="""
+    parser = argparse.ArgumentParser(description="""
 HTTP proxy service for debugging API requests
 Forwards requests to the specified API address and prints request and response information.
 usage:
     python -m mxlm.server.api_proxy -t 127.0.0.1:58080
-"""
-    )
+""")
     parser.add_argument(
         "-t",
         "--target",

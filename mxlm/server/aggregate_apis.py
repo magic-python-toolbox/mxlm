@@ -4,7 +4,6 @@ import json
 import requests
 from flask import Flask, Response, has_request_context, jsonify, redirect, request
 
-
 ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 UPSTREAM_TIMEOUT = (10, 4 * 60 * 60)
 JSON_TRUNCATE_LIMIT = 4000
