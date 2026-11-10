@@ -340,6 +340,9 @@ class ChatAPI:
             The response is the raw response, response["protocol"] tells its protocol.
             Append tool messages in the order of the tool calls, since some models match tool results
             by position instead of tool_call_id (openai_responses and gemini_generate_content sort them).
+        - Refusals return normally in the Chat Completions format for the caller to handle:
+            finish_reason="content_filter" means the platform blocked it (e.g. Anthropic's refusal, Gemini's blocks),
+            and message["refusal"] is the refusal text if any (e.g. by OpenAI, or Anthropic's explanation)
         - continue_final_message=True (openai_chat only) continues the flat final assistant message,
             the new message is the complete one, which replaces the final message
         - Support old completions API when set `completions=True`

@@ -229,11 +229,14 @@ def response_to_messages(response):
     message["sidecar"] = {
         "anthropic_messages": {"content": blocks, "message_hash": hash_message(message)}
     }
+    if response["stop_reason"] == "refusal":
+        message["refusal"] = response["stop_details"]["explanation"]
     message["finish_reason"] = {
         "end_turn": "stop",
         "max_tokens": "length",
         "stop_sequence": "stop",
         "tool_use": "tool_calls",
+        "refusal": "content_filter",
     }.get(response["stop_reason"], response["stop_reason"])
     return [message]
 

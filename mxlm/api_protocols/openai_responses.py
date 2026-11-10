@@ -147,6 +147,14 @@ def response_to_messages(response):
                 if part["type"] == "output_text"
             ),
         }
+        refusal = "\n\n".join(
+            part["refusal"]
+            for item in message_items
+            for part in item["content"]
+            if part["type"] == "refusal"
+        )
+        if refusal:
+            message["refusal"] = refusal
         reasoning = "\n\n".join(
             part["text"]
             for item in items

@@ -187,6 +187,8 @@ def create(
     # Merge the chunks to the same parts as non-stream, the stream only keeps the long connection alive.
     parts = []
     for chunk in response:
+        if chunk.get("promptFeedback", {}).get("blockReason"):
+            return chunk
         candidate = chunk["candidates"][0]
         for part in candidate.get("content", {}).get("parts", []):
             if (
@@ -209,6 +211,9 @@ def create(
 
 
 def response_to_messages(response):
+    if response.get("promptFeedback", {}).get("blockReason"):
+        # The blocked prompt has no candidates, its reason is only an enum in response["promptFeedback"]
+        return [{"role": "assistant", "content": "", "finish_reason": "content_filter"}]
     candidate = response["candidates"][0]
     message = {"role": "assistant", "content": ""}
     signatures = {}
