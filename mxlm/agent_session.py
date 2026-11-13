@@ -22,15 +22,16 @@ class AgentSession:
     - Without "tools", all tools of tool_configs are written to trajectory["tools"],
         and the MCP instructions are prepended as system messages like onPanda.
         Otherwise tool calls are matched to the MCP tools by tool name.
-    - self.tool_name_to_call is {tool name: callable(tool_call) -> content of the tool message},
-        MCP tools are registered at init, and callers can add their own tools
+    - tool_name_to_call is {tool name: callable(tool_call) -> content of the tool message} of the caller's own tools,
+        which take priority over the MCP tools of the same name, so they can short-circuit MCP.
+        self.tool_name_to_call holds them together with the MCP tools registered at init
     - self.tool_name_to_require_approval is {tool name: "always" | "never"}
 
     >>> with AgentSession(chat_api, trajectory) as agent:
     ...     trajectory = agent.run_agentic_loop()["trajectory"]
     """
 
-    def __init__(self, chat_api, trajectory):
+    def __init__(self, chat_api, trajectory, tool_name_to_call=None):
         self.chat_api = chat_api
         self.trajectory = copy.deepcopy(trajectory)
         self.tool_name_to_call = {}
@@ -52,6 +53,8 @@ class AgentSession:
             )
             if self._mcp_holder.done():
                 self.close()  # Raise the connection error
+        # The given callables take priority over the MCP tools of the same name
+        self.tool_name_to_call.update(tool_name_to_call or {})
 
     async def _hold_mcp_sessions(self, connected):
         # MCP contexts must be entered and exited in the same task, so this task holds them until close()
