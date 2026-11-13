@@ -183,6 +183,10 @@ def response_to_messages(response):
             }
         }
         messages.append(message)
+    # Function calls end the response, agentic loops rely on only the last message having tool calls
+    assert all("tool_calls" not in message for message in messages[:-1]), [
+        item["type"] for item in response["output"]
+    ]
     if response["status"] == "incomplete":
         reason = response["incomplete_details"]["reason"]
         messages[-1]["finish_reason"] = {"max_output_tokens": "length"}.get(

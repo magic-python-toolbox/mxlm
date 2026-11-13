@@ -46,6 +46,12 @@ example_trajectory = {
 }
 
 
+mcp_trajectory = {
+    "messages": [{"role": "user", "content": "What is StepFun's latest main model?"}],
+    "tool_configs": [{"type": "mcp", "server_url": "https://mcp.exa.ai/mcp"}],
+}
+
+
 def example_chat_api(protocol):
     """ChatAPI configured by .env.local, e.g. OPENAI_RESPONSES_BASE_URL, for __main__ tests"""
     from dotenv import load_dotenv, find_dotenv
